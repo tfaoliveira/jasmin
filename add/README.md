@@ -20,10 +20,10 @@ After that, that a look at the following files:
 Other examples can be found in Jasmin GitHub repository (`glob_array3` branch supports global array variables):
 * [Jasmin GitHub 1](https://github.com/jasmin-lang/jasmin/tree/glob_array3/compiler/examples)
 * [Jasmin GitHub 2](https://github.com/jasmin-lang/jasmin/tree/master/compiler/tests/success)
-* [libjc](https://github.com/tfaoliveira/libjc/tree/glob_array3/src) -- most example require the usage of a preprocessor (gpp is used in the makefiles)
+* [libjc](https://github.com/tfaoliveira/libjc/tree/glob_array3/src) -- most examples require the usage of a preprocessor (gpp is used in the makefiles)
 
 # Installing Jasmin
-To get the Jasmin compiler running you can read [Installation](https://github.com/jasmin-lang/jasmin/wiki/Installation-instructions).
+To get the Jasmin compiler running you can read the [Installation](https://github.com/jasmin-lang/jasmin/wiki/Installation-instructions) section of the Jasmin's wiki.
 I usually run the following set of commands: ('clean' Ubuntu, for instance):
 ```
 curl https://nixos.org/nix/install | sh # reading the instructions in nix website before c&p is recommended
@@ -34,7 +34,6 @@ cd compiler/
 make CIL
 make
 exit
-cd ../
 sudo install -b -D `pwd`/compiler/jasminc /usr/local/bin/ # or something else that suits your needs
 ```
 

@@ -1,0 +1,122 @@
+// this function will be 'inline'd when called
+// expects a pointer 'p' that contains at least 8*4 bytes to be loaded into a register array
+// note: register arrays should have statically known indexes
+inline fn load4(reg u64 p) -> reg u64[4]
+{
+  inline int i;
+  reg u64[4] r;
+
+  // for loops are unrolled
+  for i=0 to 4 // i={0,1,2,3}
+  { r[i] = [p + 8*i]; } // 'p' can be though as a void* variable
+
+  return r;
+}
+
+// a += b; if we assume that a and b can represent the values 2**(64*4)-1
+// then we need to have one more element in the return array to handle the
+// carry flag
+inline fn add4(reg u64[4] a b) -> reg u64[5]
+{
+  inline int i;
+  reg bool cf;
+  reg u64[5] r;
+
+  // the following 'for' loop should be removed by the compiler given that 'a'
+  // is 'dead' after this copy and, as such, 'r' and 'a' will be merged
+  for i=0 to 4
+  { r[i] = a[i]; }
+
+  // this should yield a mov instruction; to use and 'xor' initialization: r[4] = #set(0)
+  r[4] = 0;
+
+  // we add r[0] (a[0]) with b[0] and keep the carry flag. 
+  cf, r[0] += b[0];
+  // we do the same for the remaining elements...
+  for i=1 to 4
+  { cf, r[i] += b[i] + cf; }
+  // and propagate the carry flag into the last element of the array
+  _, r[4] += 0 + cf;
+
+  /*
+  // alternativly, if we set the carry flag to zero... this code is commented though
+  _, cf, _, _, _, r[4] = #set0();
+  for i=0 to 4 //i={0,1,2,3}
+  { cf, r[i] += b[i] + cf; }
+  _, r[4] += 0 + cf;
+  */
+
+  return r;
+}
+
+// store the 5 elements in the 'a' array
+inline fn store5(reg u64 p, reg u64[5] a)
+{
+  inline int i;
+
+  for i=0 to 5
+  { [p + 8*i] = a[i]; }
+}
+
+// 'export'ed functions follow the calling convention api, up to 6 arguments
+// are allowed if I recall correctly, in this case we are using 3, the
+// 'r'esult 'p'ointer, ... : they are mapped in the rdi; rsi; rdx;
+// as a side note, some instructions require the rdx register to be free, in
+// that case it is the programmer responsability to change the register's 
+// varriable: reg u64 bp_; bp_ = bp;
+export fn test_add4(reg u64 rp ap bp)
+{
+  reg u64[4] a b;
+  reg u64[5] r;
+
+  // each function will be inlined due to its type. The assembly code from compiling
+  // with 'jasminc -pasm add.jazz' is presented down bellow
+  a = load4(ap);
+  b = load4(bp);
+  r = add4(a,b);
+
+  store5(rp, r);
+}
+
+/**
+	.text
+	.p2align	5
+	.globl	_test_add4
+	.globl	test_add4
+_test_add4:
+test_add4:
+	movq	%rsp, %rax           # copy stack pointer into rax
+	leaq	-16(%rsp), %rsp      # subtract from the stack pointer to make some space
+	andq	$-8, %rsp            # align it, alignement is different if stack u256 (variables) are declared
+	movq	%rax, (%rsp)
+	movq	%rbp, 8(%rsp)
+
+	movq	(%rsi), %rax         # first load4: 'a'
+	movq	8(%rsi), %rcx
+	movq	16(%rsi), %r8
+	movq	24(%rsi), %rsi
+
+	movq	(%rdx), %r9          # second load4: 'b'
+	movq	8(%rdx), %r10
+	movq	16(%rdx), %r11
+	movq	24(%rdx), %rdx
+
+	movq	$0, %rbp             # r[4] initialization; r[0,1,2,3] is mapped into old 'a'
+
+	addq	%r9, %rax            # first add outside the loop
+	adcq	%r10, %rcx           # for i=1 to 4
+	adcq	%r11, %r8
+	adcq	%rdx, %rsi
+	adcq	$0, %rbp             # last add
+
+	movq	%rax, (%rdi)         # store5 call
+	movq	%rcx, 8(%rdi)
+	movq	%r8, 16(%rdi)
+	movq	%rsi, 24(%rdi)
+	movq	%rbp, 32(%rdi)
+
+	movq	8(%rsp), %rbp        # restore state to return
+	movq	(%rsp), %rsp
+	ret 
+*/
+

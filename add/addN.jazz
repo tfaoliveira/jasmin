@@ -1,0 +1,122 @@
+// let say that we would like to have a 'template' code for the add operation that would work
+// for arrays with size up until 7... (15 registers are available, rsp is reserved)
+//
+// we can define a global parameter N (can be thought as a #define N 7, for instance)
+// and use it throughout the file
+param int N = 1;
+
+inline fn load(reg u64 p) -> reg u64[N]
+{
+  inline int i;
+  reg u64[N] r;
+
+  for i=0 to N
+  { r[i] = [p + 8*i]; }
+
+  return r;
+}
+
+inline fn add(reg u64[N] a b) -> reg u64[N+1]
+{
+  inline int i;
+  reg bool cf;
+  reg u64[N+1] r;
+
+  for i=0 to N
+  { r[i] = a[i]; }
+
+  r[N] = 0;
+
+  cf, r[0] += b[0];
+  for i=1 to N
+  { cf, r[i] += b[i] + cf; }
+  _, r[N] += 0 + cf;
+
+  return r;
+}
+
+inline fn store(reg u64 p, reg u64[N+1] a)
+{
+  inline int i;
+
+  for i=0 to N+1
+  { [p + 8*i] = a[i]; }
+}
+
+export fn test_add(reg u64 rp ap bp)
+{
+  reg u64[N] a b;
+  reg u64[N+1] r;
+
+  // at this point is it predicted that we will run into a register allocation
+  // problem (for N=7):
+  // 1) 'ap' will be dead after the first load function is called;
+  // --- 2 (rp, bp) + 7 (a) = 9 registers are live
+  // 2) by the end of the second load 15 registers are live (rp,a,b)
+  // 3) when the code reaches the instruction 'r[N] = 0;' from add, another
+  // --- register is required: compilation fails; no spills are introduced.
+  // 4) to fix this issue we could move the instruction 'r[N] = 0;' into after
+  // --- 'cf, r[0] += b[0];' because b[0] will be dead by then; the mov
+  // --- instruction doesn't affect the flags;
+  // --- the other solution is to use a stack variable to store rp into the stack
+  // --- and restore it when needed;
+  // --- we can go for the second solution
+
+  stack u64 rps;
+  rps = rp;
+
+  a = load(ap);
+  b = load(bp);
+  r = add(a,b);
+
+  rp = rps;
+  store(rp, r);
+}
+
+/**
+# review of the assembly code for N=1
+
+	.text
+	.p2align	5
+	.globl	_test_add
+	.globl	test_add
+_test_add:
+test_add:
+	movq	%rsp, %r10       # stack setup: since there are available registers,
+                         # rsp will be stored in r10
+	leaq	-8(%rsp), %rsp
+	andq	$-8, %rsp
+
+	movq	%rdi, (%rsp)     # store rp into the stack; unnecessary for this size...
+                         # this issue is addressed in addNv2.jazz
+
+	movq	(%rsi), %rax     # load 'a'
+	movq	(%rdx), %rcx     # load 'b'
+	movq	$0, %rdx         # r[1] = 0
+
+	addq	%rcx, %rax       # first add outside for
+                         # for should be here but 'for i=1 to 1' evaluates to nothing
+	adcq	$0, %rdx         # last add outside for
+
+	movq	(%rsp), %rcx     # restore rp
+	movq	%rax, (%rcx)     # store
+	movq	%rdx, 8(%rcx)
+
+	movq	%r10, %rsp       # restore rsp and return
+	ret 
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,139 @@
+// this file is an 'improvement' of the previous one;
+// spill only happens if N > 6
+param int N = 6;
+
+inline fn load(reg u64 p) -> reg u64[N]
+{
+  inline int i;
+  reg u64[N] r;
+
+  for i=0 to N
+  { r[i] = [p + 8*i]; }
+
+  return r;
+}
+
+inline fn add(reg u64[N] a b) -> reg u64[N+1]
+{
+  inline int i;
+  reg bool cf;
+  reg u64[N+1] r;
+
+  for i=0 to N
+  { r[i] = a[i]; }
+
+  r[N] = 0;
+
+  cf, r[0] += b[0];
+  for i=1 to N
+  { cf, r[i] += b[i] + cf; }
+  _, r[N] += 0 + cf;
+
+  return r;
+}
+
+inline fn store(reg u64 p, reg u64[N+1] a)
+{
+  inline int i;
+
+  for i=0 to N+1
+  { [p + 8*i] = a[i]; }
+}
+
+export fn test_add(reg u64 rp ap bp)
+{
+  reg u64[N] a b;
+  reg u64[N+1] r;
+  stack u64 rps;
+
+  // since all inputs of the if condition are statically known then it will
+  // be resolved during compilation
+  if(N > 6)
+  { rps = rp; }
+
+  a = load(ap);
+  b = load(bp);
+  r = add(a,b);
+
+  // same comment applies
+  if(N > 6)
+  { rp = rps; }
+
+  store(rp, r);
+}
+
+/*
+# review of the assembly code for N=6
+	.text
+	.p2align	5
+	.globl	_test_add
+	.globl	test_add
+_test_add:
+test_add:
+	movq	%rsp, %rax         # stack setup
+	leaq	-48(%rsp), %rsp
+	andq	$-8, %rsp
+	movq	%rax, (%rsp)
+	movq	%rbx, 8(%rsp)
+	movq	%rbp, 16(%rsp)
+	movq	%r12, 24(%rsp)
+	movq	%r13, 32(%rsp)
+	movq	%r14, 40(%rsp)
+
+                           # no copy into the stack
+
+	movq	(%rsi), %rax       # load 'a'
+	movq	8(%rsi), %rcx
+	movq	16(%rsi), %r8
+	movq	24(%rsi), %r9
+	movq	32(%rsi), %r10
+	movq	40(%rsi), %rsi
+
+	movq	(%rdx), %r11       # load 'b'
+	movq	8(%rdx), %rbp
+	movq	16(%rdx), %rbx
+	movq	24(%rdx), %r12
+	movq	32(%rdx), %r13
+	movq	40(%rdx), %rdx
+
+	movq	$0, %r14           # r[4]
+
+	addq	%r11, %rax         # r += b
+	adcq	%rbp, %rcx
+	adcq	%rbx, %r8
+	adcq	%r12, %r9
+	adcq	%r13, %r10
+	adcq	%rdx, %rsi
+	adcq	$0, %r14
+
+	movq	%rax, (%rdi)       # store
+	movq	%rcx, 8(%rdi)
+	movq	%r8, 16(%rdi)
+	movq	%r9, 24(%rdi)
+	movq	%r10, 32(%rdi)
+	movq	%rsi, 40(%rdi)
+	movq	%r14, 48(%rdi)
+
+	movq	8(%rsp), %rbx      # restore and return
+	movq	16(%rsp), %rbp
+	movq	24(%rsp), %r12
+	movq	32(%rsp), %r13
+	movq	40(%rsp), %r14
+	movq	(%rsp), %rsp
+	ret 
+
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+

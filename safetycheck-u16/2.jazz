@@ -1,0 +1,36 @@
+u16[16] c = 
+{ 1,1,1,1,
+  2,2,2,2,
+  3,3,3,3,
+  4,4,4,4
+};
+
+
+inline fn f2_while_no_scale() -> reg u16
+{
+  reg u64 i;
+  reg u16 r;
+  reg ptr u16[16] cp;
+  
+  i = 0;
+  r = 0;
+  cp = c;
+  // i < 32           : *** Possible Safety Violation(s): line 23: in_bound: cp.[U16 ((int of u64) i) ] (length 32 U8)
+  // i < 31           : *** No Safety Violation
+  // i < (32-1)       : *** No Safety Violation
+  // i < ((16*2) - 1) : *** Possible Safety Violation(s): line 23: in_bound: cp.[U16 ((int of u64) i) ] (length 32 U8)
+  while(i < 32 )
+  { r += cp.[(int) i]; 
+    i += 2;
+  }
+  
+  return r;
+}
+
+
+export fn e2_while_no_scale() -> reg u16
+{
+  reg u16 r;
+  r = f2_while_no_scale();
+  return r;
+}

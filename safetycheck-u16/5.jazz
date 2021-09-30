@@ -1,0 +1,35 @@
+u16[16] c = 
+{ 1,1,1,1,
+  2,2,2,2,
+  3,3,3,3,
+  4,4,4,4
+};
+
+
+inline fn f5_while_scale(reg u64 out) -> reg u16
+{
+  reg u64 i;
+  reg u16 r;
+  reg ptr u16[16] cp;
+  
+  i = 0;
+  r = 0;
+  cp = c;
+  while(i < 16)
+  { r += cp[(int) i];
+    (u16)[out + (2*i)] = r;
+    i += 1;
+    r += cp[(int) i];
+    (u16)[out + (2*i)] = r;
+    i += 1;
+  }
+  
+  return r;
+}
+
+export fn e5_while_scale(reg u64 out) -> reg u16
+{
+  reg u16 r;
+  r = f5_while_scale(out);
+  return r;
+}

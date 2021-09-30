@@ -1,0 +1,22 @@
+
+inline fn f3_while_scale(reg u64 in) -> reg u16
+{
+  reg u64 i;
+  reg u16 r;
+  
+  i = 0;
+  r = 0;
+  while(i < 16)
+  { r += (u16)[in + (2*i)];
+    i += 1;
+  }
+  
+  return r;
+}
+
+export fn e3_while_scale(reg u64 in) -> reg u16
+{
+  reg u16 r;
+  r = f3_while_scale(in);
+  return r;
+}

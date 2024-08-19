@@ -1104,13 +1104,6 @@ let pp_liveness vars liveness_per_callsite liveness_table conflicts a =
     let extern = !m_word, !m_extra, !m_vector, !m_flag in
     pp_recap Format.std_formatter fn intern extern)
 
-let doit = function
-    | None -> "None"
-    | Some Return_address_kind.RAKexport -> "RAKexport"
-    | Some RAKstack -> "RAKstack"
-    | Some RAKregister -> "RAKregister"
-    | Some RAKextra_register -> "RAKextra_register"
-
 let global_allocation translate_var get_internal_size (funcs: ('info, 'asm) func list) :
   (unit, 'asm) func list * (funname -> Sv.t) * (var -> var) * (funname -> Sv.t) * retaddr Hf.t =
   (* Preprocessing of functions:
@@ -1146,8 +1139,6 @@ let global_allocation translate_var get_internal_size (funcs: ('info, 'asm) func
             in
             let r = get_r "ra" Normal in
             let tmp =
-             (* Fixme: Add an option in Arch to say when the tmp reg is
-                needed. *)
                 if Arch.alloc_stack_need_extra (get_internal_size f)
                 then Some (get_r "tmp" Normal)
                 else None

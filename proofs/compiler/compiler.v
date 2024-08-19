@@ -8,7 +8,8 @@ Require Import
   arch_params
   compiler_util
   expr
-  flag_combination.
+  flag_combination
+  return_address_kind.
 Require Import
   arch_decl
   arch_extra

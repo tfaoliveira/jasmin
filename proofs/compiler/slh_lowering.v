@@ -18,7 +18,9 @@
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
-Require Import expr.
+Require Import 
+  expr
+  return_address_kind.
 Require constant_prop flag_combination.
 Require Import compiler_util.
 

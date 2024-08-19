@@ -122,6 +122,11 @@ let set_cc cc =
     | _ -> assert false
   in call_conv := cc
 
+let return_address_kind = ref None
+let set_return_address_kind s =
+    let ral = List.assoc s return_address_kind_strings in
+    return_address_kind := Some ral
+  
 let print_strings = function
   | Compiler.Typing                      -> "typing"   , "typing"
   | Compiler.ParamsExpansion             -> "cstexp"   , "param expansion"
@@ -219,6 +224,10 @@ let options = [
     "-stack-zero-size",
       Arg.Symbol (List.map fst Annot.ws_strings, set_stack_zero_size),
       " Select stack zeroization size for export functions";
+    "-return-address-kind",
+     Arg.Symbol
+       (List.map fst return_address_kind_strings, set_return_address_kind),
+     ": set the default return address kind of local functions";
     "-pliveness", Arg.Set print_liveness, " Print liveness information during register allocation"
   ] @  List.map print_option Compiler.compiler_step_list @ List.map stop_after_option Compiler.compiler_step_list
 

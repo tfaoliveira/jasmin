@@ -1954,17 +1954,18 @@ let tt_call_conv loc params returns cc =
 let process_f_annot loc funname f_cc annot =
   let open FInfo in
 
-  let mk_ra = Annot.filter_string_list None ["stack", OnStack; "reg", OnReg] in
-
   let retaddr_kind =
-    let kind = Annot.ensure_uniq1 "returnaddress" mk_ra annot in
-    if kind <> None && not (FInfo.is_subroutine f_cc) then
+    let mk_ra = Annot.filter_string_list None return_address_kind_strings in
+    let rak0 = Annot.ensure_uniq1 "returnaddress" mk_ra annot in
+    if rak0 <> None && not (FInfo.is_subroutine f_cc) then
       hierror
         ~loc:(Lone loc)
         ~funname
         ~kind:"unexpected annotation"
         "returnaddress only applies to subroutines";
-    kind
+    match rak0 with
+    | Some rak -> Some rak
+    | None -> !Glob_options.return_address_kind
   in
 
   let stack_zero_strategy =

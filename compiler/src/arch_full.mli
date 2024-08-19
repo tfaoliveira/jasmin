@@ -6,6 +6,7 @@ type 'a callstyle =
   | StackDirect           (* call instruction push the return address on top of the stack *)
   | ByReg of 'a option    (* call instruction store the return address on a register, 
                                (Some r) neams that the register is forced to be r *)
+  | ByExtraReg            (* The return address is stored in a register that is not a general purpose register. *)
 (* x86    : StackDirect 
    arm v7 : ByReg (Some ra)
    riscV  : ByReg (can it be StackDirect too ?)

@@ -186,3 +186,10 @@ val add_warning : warning -> unit -> unit
 val warning :
       warning -> Location.i_loc
    -> ('a, Format.formatter, unit) format -> 'a
+
+
+(* -------------------------------------------------------------------- *)
+
+(* Return address kinds and their strings for annotations. We omit [RAKexport]. *)
+val return_address_kind_strings :
+  (string * Return_address_kind.return_address_kind) list

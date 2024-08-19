@@ -937,17 +937,31 @@ let post_process
        else to_save, None
      end
 
+let get_return_address_location f : var Arch_full.callstyle =
+  match f.f_cc with
+  | Export _ -> StackDirect
+  | Internal -> assert false
+  | Subroutine _ ->
+      match f.f_annot.retaddr_kind with
+      | None -> Arch.callstyle
+      | Some ral -> begin
+        match ral with
+        | RAKexport -> assert false
+        | RAKstack -> StackDirect
+        | RAKregister -> Arch.callstyle (* We cannot use ByReg on StackDirect Architectures *)
+        | RAKextra_register -> ByExtraReg
+      end
+
+
 let subroutine_ra_by_stack f =
   match f.f_cc with
   | Export _ | Internal -> assert false
   | Subroutine _ ->
-      match Arch.callstyle with
-      | Arch_full.StackDirect -> true
-      | Arch_full.ByReg oreg ->
-        let dfl = oreg <> None && has_call_or_syscall f.f_body in
-        match f.f_annot.retaddr_kind with
-        | None -> dfl
-        | Some k -> dfl || k = OnStack
+    let ral = get_return_address_location f in
+    match ral with
+    | StackDirect -> true
+    | ByReg oreg -> oreg <> None && has_call_or_syscall f.f_body
+    | ByExtraReg -> false
 
 module Miloc = Map.Make (struct
   open Location
@@ -1090,6 +1104,13 @@ let pp_liveness vars liveness_per_callsite liveness_table conflicts a =
     let extern = !m_word, !m_extra, !m_vector, !m_flag in
     pp_recap Format.std_formatter fn intern extern)
 
+let doit = function
+    | None -> "None"
+    | Some Return_address_kind.RAKexport -> "RAKexport"
+    | Some RAKstack -> "RAKstack"
+    | Some RAKregister -> "RAKregister"
+    | Some RAKextra_register -> "RAKextra_register"
+
 let global_allocation translate_var get_internal_size (funcs: ('info, 'asm) func list) :
   (unit, 'asm) func list * (funname -> Sv.t) * (var -> var) * (funname -> Sv.t) * retaddr Hf.t =
   (* Preprocessing of functions:
@@ -1109,29 +1130,35 @@ let global_allocation translate_var get_internal_size (funcs: ('info, 'asm) func
     let f = f |> fill_in_missing_names |> Ssa.split_live_ranges false in
     Hf.add liveness_table f.f_name (Liveness.live_fd true f);
     (* compute where will be store the return address *)
-    let ra =
-       match f.f_cc with
-       | Export _ -> StackDirect
-       | Internal -> assert false
-       | Subroutine _ ->
-         match Arch.callstyle with
-         | Arch_full.StackDirect -> StackDirect
-         | Arch_full.ByReg oreg ->
-           let dfl = oreg <> None && has_call_or_syscall f.f_body in
-           let r = V.mk ("ra_"^f.f_name.fn_name) (Reg(Normal,Direct)) (tu Arch.reg_size) f.f_loc [] in
-           (* Fixme: Add an option in Arch to say when the tmp reg is needed *)
-           let tmp_needed = Arch.alloc_stack_need_extra (get_internal_size f) in
-           let tmp =
-             if tmp_needed then
-               let tmp = V.mk ("tmp_"^f.f_name.fn_name) (Reg(Normal,Direct)) (tu Arch.reg_size) f.f_loc [] in
-               Some tmp
-             else None in
-           let rastack =
-             match f.f_annot.retaddr_kind with
-             | None -> dfl
-             | Some k -> dfl || k = OnStack in
-           if rastack then StackByReg (r, tmp)
-           else ByReg (r, tmp) in
+    let ra = 
+        match f.f_cc with
+        | Export _ -> StackDirect
+        | Internal -> assert false
+        | Subroutine _ ->
+            let ral = get_return_address_location f in
+            let get_r pre rk =
+             V.mk
+               (pre ^ "_" ^ f.f_name.fn_name)
+               (Reg (rk, Direct))
+               (tu Arch.reg_size)
+               f.f_loc
+               []
+            in
+            let r = get_r "ra" Normal in
+            let tmp =
+             (* Fixme: Add an option in Arch to say when the tmp reg is
+                needed. *)
+                if Arch.alloc_stack_need_extra (get_internal_size f)
+                then Some (get_r "tmp" Normal)
+                else None
+            in
+            if ral = ByExtraReg then ByReg(get_r "ra" Extra, None) else
+            match Arch.callstyle with
+            | Arch_full.StackDirect -> StackDirect
+            | Arch_full.ByReg oreg when ((oreg <> None && has_call_or_syscall f.f_body) || ral = StackDirect) -> StackByReg(r, tmp)
+            | Arch_full.ByReg _ -> ByReg(r, tmp)
+            | Arch_full.ByExtraReg -> assert false
+    in
     Hf.add return_addresses f.f_name ra;
     let written =
       let written, cg = written_vars_fc f in

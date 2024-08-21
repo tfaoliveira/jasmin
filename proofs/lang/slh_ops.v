@@ -33,3 +33,10 @@ Proof.
 Qed.
 
 HB.instance Definition _ := hasDecEq.Build slh_op slh_op_eq_axiom.
+
+Variant slh_t :=
+| Slh_None
+| Slh_msf.
+
+Definition is_shl_none (ty : slh_t) : bool :=
+  if ty is Slh_None then true else false.

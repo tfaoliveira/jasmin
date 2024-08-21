@@ -365,6 +365,7 @@ let is_ct_sopn is_ct_asm (o : 'a Sopn.sopn) =
   match o with
   | Opseudo_op _ -> true
   | Oslh _ -> true
+  | Ointernal _ -> true
   | Oasm asm -> is_ct_asm asm
 
 (* -----------------------------------------------------------*)

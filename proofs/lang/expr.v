@@ -327,6 +327,7 @@ Module Type InstrInfoT <: TAG.
   Parameter with_location : t -> t.
   Parameter is_inline : t -> bool.
   Parameter var_info_of_ii : t -> var_info.
+  Parameter update_after_call : t -> bool.
 End InstrInfoT.
 
 Module InstrInfo : InstrInfoT.
@@ -335,6 +336,7 @@ Module InstrInfo : InstrInfoT.
   Definition with_location (ii : t) := ii.
   Definition is_inline (_ : t) : bool := false.
   Definition var_info_of_ii (_ : t) : var_info := dummy_var_info.
+  Definition update_after_call (_ : t) : bool := false.
 End InstrInfo.
 
 Definition instr_info := InstrInfo.t.
@@ -343,6 +345,8 @@ Definition ii_with_location (ii : instr_info) : instr_info :=
   InstrInfo.with_location ii.
 Definition ii_is_inline (ii : instr_info) : bool := InstrInfo.is_inline ii.
 Definition var_info_of_ii (ii : instr_info) : var_info := InstrInfo.var_info_of_ii ii.
+Definition ii_update_after_call (ii : instr_info) : bool :=
+  InstrInfo.update_after_call ii.
 
 Variant assgn_tag :=
   | AT_none       (* assignment introduced by the developer that can be removed *)
@@ -916,10 +920,46 @@ Definition is_zero sz (e: pexpr) : bool :=
 
 Notation copn_args := (seq lval * sopn * seq pexpr)%type (only parsing).
 
-Definition instr_of_copn_args
+Section WITH_PARAMS.
+
+Context
   {asm_op : Type}
   {asmop : asmOp asm_op}
-  (tg : assgn_tag)
-  (args : copn_args)
-  : instr_r :=
+  {pd : PointerData}.
+
+Definition instr_of_copn_args (tg : assgn_tag) (args : copn_args) : instr_r :=
   Copn args.1.1 tg args.1.2 args.2.
+
+Definition gen_use_vars
+  (ir : internal_reason) (vs : seq var) (tout : seq stype) : instr_r :=
+  let les := [seq Lnone dummy_var_info t | t <- tout ] in
+  let op := Ouse_vars ir (map vtype vs) tout in
+  let res := [seq Pvar (mk_lvar (mk_var_i v)) | v <- vs ] in
+  Copn les AT_keep (Ointernal op) res.
+
+Definition use_vars_get_reg (ir : internal_reason) : instr_r :=
+  gen_use_vars ir [::] [:: sword Uptr ].
+
+Definition use_vars_use_one (ir : internal_reason) (x : var) : instr_r :=
+  gen_use_vars ir [:: x ] [::].
+
+End WITH_PARAMS.
+
+(* ------------------------------------------------------------------- *)
+
+Module Type OpnArgs.
+  Parameter lval rval : Type.
+  Parameter lvar : var_i -> lval.
+  Parameter lmem : forall {_ : PointerData}, wsize -> var_i -> Z -> lval.
+  Parameter rvar : var_i -> rval.
+  Parameter rconst : wsize -> Z -> rval.
+End OpnArgs.
+
+Module CopnArgs.
+  Definition lval := lval.
+  Definition rval := pexpr.
+  Definition lvar := Lvar.
+  Definition lmem {_ : PointerData} ws x z := Lmem Aligned ws x (cast_const z).
+  Definition rvar x := Pvar (mk_lvar x).
+  Definition rconst ws z := cast_w ws (Pconst z).
+End CopnArgs.

@@ -122,6 +122,8 @@ let set_cc cc =
     | _ -> assert false
   in call_conv := cc
 
+let protect_calls = ref false
+
 let return_address_kind = ref None
 let set_return_address_kind s =
     let ral = List.assoc s return_address_kind_strings in
@@ -152,6 +154,7 @@ let print_strings = function
   | Compiler.RegAllocation               -> "ralloc"   , "register allocation"
   | Compiler.DeadCode_RegAllocation      -> "rallocd"  , "dead code after register allocation"
   | Compiler.Linearization               -> "linear"   , "linearization"
+  | Compiler.ProtectCalls                -> "pcalls"   , "protect calls"
   | Compiler.StackZeroization            -> "stackzero", "stack zeroization"
   | Compiler.Tunneling                   -> "tunnel"   , "tunneling"
   | Compiler.Assembly                    -> "asm"      , "generation of assembly"
@@ -224,6 +227,7 @@ let options = [
     "-stack-zero-size",
       Arg.Symbol (List.map fst Annot.ws_strings, set_stack_zero_size),
       " Select stack zeroization size for export functions";
+    "-protect-calls", Arg.Set protect_calls, ": protect CALL/RET instructions";
     "-return-address-kind",
      Arg.Symbol
        (List.map fst return_address_kind_strings, set_return_address_kind),

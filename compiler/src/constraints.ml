@@ -283,6 +283,9 @@ module VlPairs = struct
   let add_le_speculative s' (_, s) = Lvl.add_le s' s
 
   let normalise (l, _) = (l, l)
+
+  let is_public (n, s) = Lvl.is_public n && Lvl.is_public s
+  let is_secret (n, s) = Lvl.is_secret n && Lvl.is_secret s
 end
 
 

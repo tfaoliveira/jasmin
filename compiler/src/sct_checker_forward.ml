@@ -26,6 +26,9 @@ let spoly   = "poly"
 let spublic = "public"
 let stransient = "transient"
 let smsf = "msf"
+let supdate_after_call = "update_after_call"
+let smodmsf = "modmsf"
+let snomodmsf = "nomodmsf"
 
 let sflexible = "flex"
 let sstrict   = "strict"
@@ -53,7 +56,7 @@ type special_op =
 let is_special o =
   match o with
   | Sopn.Opseudo_op (Pseudo_operator.Ospill (o, _)) -> Spill o
-  | Sopn.Opseudo_op _ -> Other
+  | Sopn.Opseudo_op _ | Sopn.Ointernal _ -> Other
   | Oasm _ -> Other
   | Oslh o ->
     match o with
@@ -106,12 +109,40 @@ let is_Modified m =
   | Modified _ -> true
   | NotModified -> false
 
+let pp_modmsf fmt modmsf =
+  let s =
+    match modmsf with
+    | Modified _ -> smodmsf
+    | NotModified -> snomodmsf
+  in
+  Format.fprintf fmt "%s" s
+
+let pp_modmsf_trace fmt tr =
+  if tr <> []
+  then
+    let pp_item fmt (l, fn) =
+      Format.fprintf fmt
+        "@[<h>the function %s destroys MSFs at %a@]"
+        fn.fn_name
+        L.pp_iloc l
+    in
+    Format.fprintf fmt "Trace:@;<0 2>@[<v>%a@]" (pp_list "" pp_item) tr
+
 type ty_fun = {
     modmsf               : modmsf;
     tyin                 : vfty list;
     tyout                : vfty list;
     constraints          : C.constraints;
-    resulting_corruption : VlPairs.t (* resulting memory corruption after function call *)
+    resulting_corruption : VlPairs.t; (* resulting memory corruption after function call *)
+
+    (* These are the returned variables whose type is guaranteed to be either
+       public (L, L) or secret (H, H) regardless of the caller.
+       We do not set these as transient after returns, since regardless of the
+       caller, they must to keep their type.
+       For pointers the check is made only for addresses.
+       Pointed data is always made transient.
+       TODO_RSB: Shouldn't we be able to assume this also for pointed data? *)
+    out_guaranteed_constant : bool list;
   }
 
 type ('info,'asm) fenv = {
@@ -127,25 +158,25 @@ module FEnv = struct
 
 end
 
-let pp_modmsf fmt modmsf =
-  let s =
-    match modmsf with
-    | Modified _ -> "modmsf"
-    | NotModified -> "nomodmsf"
-  in
-  Format.fprintf fmt "%s" s
+(*let pp_guaranteed_constant =
+  pp_list ",@ " (Format.pp_print_bool)
+
+      @ guaranteed constant:@[%a@]\
+*)
 
 let pp_funty fmt (fname, tyfun) =
   Format.fprintf fmt
     "@[<v>%a %s : @[%a@] ->@ @[%a@]@ \
       output corruption: %a@.\
-      @ constraints:@ @[%a@]@]@."
+      @ constraints:@ @[%a@]\
+      @]@."
     pp_modmsf tyfun.modmsf
     fname
     (pp_list " *@ " pp_vfty) tyfun.tyin
     (pp_list " *@ " pp_vfty) tyfun.tyout
     pp_vty (Direct (tyfun.resulting_corruption))
     C.pp tyfun.constraints
+    (*pp_guaranteed_constant tyfun.out_guaranteed_constant*)
 
 
 (* --------------------------------------------------------------- *)
@@ -175,9 +206,17 @@ let rec modmsf_i fenv i =
     end
   | Cfor(_, _, c) -> modmsf_c fenv c
   | Ccall (_, f, _) ->
-    match (FEnv.get_fty fenv f).modmsf with
-    | Modified (l, tr) -> Modified(i.i_loc, (l, f) :: tr)
-    | NotModified -> NotModified
+      (* Local function calls destroy the MSF.
+         We don't need to check for the [update_after_call] annotation, since
+         such functions need to return the MSF and therefore it will be set
+         after the call (i.e., the MSF is indeed modified, but we get a new one
+         as a returned value). *)
+      if Prog.is_inline i.i_annot (FEnv.get_fun_def fenv f).f_cc
+      then
+        match (FEnv.get_fty fenv f).modmsf with
+        | Modified(l, tr) -> Modified(i.i_loc, (l, f) :: tr)
+        | NotModified -> NotModified
+      else modified_here
 
 and modmsf_c fenv c =
   List.map (modmsf_i fenv) c
@@ -246,16 +285,6 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
 
   let checks ms xs = List.iter (check ms) xs in
 
-  let pp_modmsf_trace fmt tr =
-    let pp_item fmt (l, fn) =
-      Format.fprintf fmt
-        "@[<h>the function %s destroys MSFs at %a@]"
-        fn.fn_name
-        L.pp_iloc l
-    in
-    Format.fprintf fmt "Trace:@;<0 2>@[<v>%a@]" (pp_list "" pp_item) tr
-  in
-
   let check_call ~loc fn modmsf ms =
     match modmsf with
     | Modified(l, tr) ->
@@ -314,6 +343,9 @@ let rec infer_msf_i ~withcheck fenv (tbl:(L.i_loc, Sv.t) Hashtbl.t) i ms =
     ms
 
   | Ccall(xs, f, es) ->
+    (* The inference does not need to consider the [update_after_call]
+       annotation because it refers to an MSF in [xs] and we take care of this
+       already. *)
     let fty = FEnv.get_fty fenv f in
     let ms =
       let doout ms vfty x =
@@ -424,6 +456,9 @@ module Env : sig
   val set_spill : env -> venv -> var_i list -> venv
   val set_unspill : env -> venv -> var_i list -> venv
 
+  val after_call : env -> venv -> bool list -> int glvals -> venv
+
+  val pp_venv : Format.formatter -> venv -> unit
 end = struct
 
   type env = {
@@ -576,30 +611,42 @@ end = struct
   (* freshen all variables in environment env, venv, with
      possibly a minimum (typically memory corruption) *)
   let freshen ?min env venv =
-    let fresh ~in_memory le =
-      let l = fresh2 env in
+    let fresh ~in_memory ~is_mmx le =
+      let l = if is_mmx then public2 env else fresh2 env in
       if in_memory && min != None then VlPairs.add_le (oget min) l;
       VlPairs.add_le le l;
       l
     in
     { venv with vtype = Sv.fold (fun x vtype ->
-        let in_memory = match x.v_kind with
+        let in_memory, is_mmx = match x.v_kind with
           | Wsize.Global (* likely unused as global variables are not in venv.vars *)
-          | Stack _ -> true
-          | Const | Inline | Reg _ -> false
+          | Stack _ -> (true, false)
+          | Const | Inline -> (false, false)
+          | Reg(rk, _) -> (false, rk = Extra)
         in
         let ty =
           match Mv.find x vtype with
-          | Direct le -> Direct (fresh ~in_memory le)
+          | Direct le -> Direct (fresh ~in_memory ~is_mmx le)
           | Indirect(lp, le) ->
-             Indirect(fresh ~in_memory lp, fresh ~in_memory:true le) (* the pointed values are in memory *)
+              (* The pointed values are in memory. *)
+              let lp = fresh ~in_memory ~is_mmx lp in
+              let le = fresh ~in_memory:true ~is_mmx:false le in
+              Indirect(lp, le)
         in
         Mv.add x ty vtype) venv.vars venv.vtype }
+
+  let pp_venv fmt venv =
+      let pp fmt (x, ty) = Format.fprintf fmt "%a -> %a" pp_var x pp_vty ty in
+      Format.fprintf fmt "@[<hov>{%a}@]" (pp_list ",@. " pp) (Mv.bindings venv.vtype)
 
   let ensure_le loc venv1 venv2 =
     let add_le_silent _ oty1 oty2 = add_le_var (oget oty1) (oget oty2); None in
     try ignore (Mv.merge add_le_silent venv1.vtype venv2.vtype)
     with Lvl.Unsat _unsat ->
+      (*Format.printf
+        "==== ENTER LOOP ====\nBEFORE:\n%a\nAFTER:\n%a\n\n@."
+        pp_venv venv2
+        pp_venv venv1;*)
       error ~loc "constraints caused by the loop cannot be satisfied"
 
   let clone_for_call (env:env) (tyfun:ty_fun) =
@@ -656,6 +703,54 @@ end = struct
       set_ty env venv x ty) venv (get_spilled env x)
    in
    List.fold_left add venv xs
+  (* TODO_RSB: This makes MSFs transient. We assumed that this never happened,
+     but it doesn't seem to affect things? *)
+  (* Fresh variable environment where all public variables became transient. *)
+  let after_call env venv guaranteed_public lvs =
+
+    (* These variables are guaranteed to be either (L, L) or (H, H) after the
+       function returns. *)
+    let constant_lvars =
+      let is_constant_lval i x =
+        match x with
+        | Lvar x | Laset (_, _, _, x, _) -> begin
+            try if List.at guaranteed_public i then Some (L.unloc x) else None
+            with Invalid_argument _ -> assert false
+          end
+        | _ -> None
+      in
+      List.filteri_map is_constant_lval lvs
+    in
+
+    (* Whether we need to update the type of the variable.
+       The type of pointed data always gets updated.
+       We don't consider MMX registers to be vulnerable because we forbid moving
+       non-secret values to MMX.
+       This works for the pointer itself but not for the pointed data. *)
+    let is_rsb_vulnerable k =
+      match k with
+      | Wsize.Const | Reg(Extra, _) -> false
+      | Inline | Global | Stack _ | Reg(Normal, _) -> true
+    in
+
+    let new_le (le_n, _) = (le_n, secret env) in
+    let maybe_new_le x le =
+      if not (List.mem x constant_lvars) && is_rsb_vulnerable x.v_kind
+      then new_le le
+      else le
+    in
+
+    let add x acc =
+      let ty' =
+        match Mv.find x acc with
+        | Direct(le) -> Direct(maybe_new_le x le)
+        | Indirect(lp, le) -> Indirect(maybe_new_le x lp, new_le le)
+        | exception Not_found -> assert false
+      in
+      Mv.add x ty' acc
+    in
+
+    { venv with vtype = Sv.fold add venv.vars venv.vtype }
 
 end
 
@@ -798,6 +893,7 @@ module MSF : sig
   val check_msf_exact : t -> var_i -> unit
   val loop : Env.env -> L.i_loc -> t -> t
   val end_loop : L.t -> t -> t -> t
+  val after_call : loc:L.t -> t -> annotations -> vfty list -> int glvals -> t
 
   val pp : Format.formatter -> t -> unit
 
@@ -864,8 +960,8 @@ module MSF : sig
 
   let pp fmt (xs, oe) =
     match oe with
-    | Some e -> Format.fprintf fmt "Trans %a %a" pp_vset xs pp_expr e
-    | None   -> Format.fprintf fmt "Exact %a" pp_vset xs
+    | Some e -> Format.fprintf fmt "@[Trans %a %a@]" pp_vset xs pp_expr e
+    | None   -> Format.fprintf fmt "@[Exact %a@]" pp_vset xs
 
   let loop env loc ((xs, oe) as msf) =
     let xs' = Env.msf_oracle env loc in
@@ -892,6 +988,26 @@ module MSF : sig
         "msf is %a it should be be at least %a"
         pp msfo pp msfi
 
+  let after_call ~loc ((xs, ocond) as msf) annot tout lvs =
+    if Annot.ensure_uniq1 supdate_after_call Annot.none annot <> Some ()
+    then toinit
+    else
+      let msg = "This function is annotated with " ^ supdate_after_call in
+      if Option.is_some ocond then
+        error ~loc
+          "%s, but the MSF state is %a (it should be updated)"
+          msg
+          pp msf;
+      let get_msf (t, lv) =
+        if t = IsMsf
+        then reg_lval ~direct:true loc lv |> L.unloc |> Option.some
+        else None
+      in
+      match List.filter_map get_msf (List.combine tout lvs) with
+      | [] -> error ~loc "%s, but it does not return an MSF" msg
+      | [x] -> exact (Sv.singleton x)
+      |  _ -> error ~loc "%s, but it returns more than one MSF" msg
+
 end
 
 
@@ -899,11 +1015,28 @@ end
 (* Type checking of lvalue                                   *)
 type msf_e = MSF.t * Env.venv
 
+let ensure_public_mmx env venv x ety =
+  if is_regx (L.unloc x) then
+    match ety with
+    | Direct le | Indirect (le, _) ->
+        try VlPairs.add_le le (Env.public2 env)
+        with Lvl.Unsat _ ->
+          error
+            ~loc:(L.loc x)
+            "Assignment of type %a to %a not allowed. \
+            MMX registers must always be public."
+            pp_vty ety
+            pp_var_i x
+
+(* TODO_RSB: For [Lnone], register allocation will never choose an MMX register,
+   so we don't check. But this should be fixed, so it's not a good idea. *)
 let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
   (* First path the type ety to make it consistant with the variable info *)
   match x with
   | Lnone _ -> msf_e
   | Lvar x ->
+      ensure_public_mmx env venv x ety;
+
       (* TODO assumption: p = e when p is a pointer and e a direct value means p
          points to a new position, where the expression is *)
       (* as opposed to assigning the pointer directly to the given value *)
@@ -947,6 +1080,7 @@ let ty_lval env ((msf, venv) as msf_e : msf_e) x ety : msf_e =
         msf, Env.corruption_speculative env venv le
 
   | Lasub(_, _, _, x, i) ->
+      (* TODO_RSB: This is not needed. ensure_public_mmx env venv x ety; *)
       ensure_public_address env venv (L.loc x) x;
       ensure_public env venv (L.loc x) i;
       let le = content_ty ety in
@@ -1000,11 +1134,13 @@ let ensure_public_address_expr env venv loc e =
   | Indirect (le, _) -> try VlPairs.add_le le (Env.public2 env)
       with Lvl.Unsat unsat -> error_unsat loc unsat pp_expr e ety (Direct (Env.public2 env))
 
+
 (* --------------------------------------------------------------- *)
 (* [ty_instr env msf i] return msf' such that env, msf |- i : msf' *)
 
 let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
   let loc = i.i_loc.L.base_loc in
+  let annot = i.i_annot in
   match i.i_desc with
   | Csyscall (xs, o, es) ->
     (* TODO: generalize to other syscalls *)
@@ -1020,7 +1156,7 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
 
   | Cassgn(x, _, _, e) ->
     let ety = ty_expr env venv loc e in
-    ty_lval env msf_e x (declassify_ty env i.i_annot ety)
+    ty_lval env msf_e x (declassify_ty env annot ety)
 
   | Copn(xs, _, o, es) ->
     begin match is_special o, xs, es with
@@ -1121,6 +1257,9 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
     MSF.enter_if msf' (Papp1(Onot, e)), venv1
 
   | Ccall (xs, f, es) ->
+    (*Format.printf
+      "==== CALL %s ====\nBEFORE:@.%a\n" f.fn_name Env.pp_venv venv;*)
+
     let fty = FEnv.get_fty fenv f in
     let modmsf = fty.modmsf in
     let tyout, tyin, resulting_corruption = Env.clone_for_call env fty in
@@ -1149,15 +1288,39 @@ let rec ty_instr is_ct_asm fenv env ((msf,venv) as msf_e :msf_e) i =
       let ty =
         match vfty with
         | IsMsf -> Env.dpublic env
-        | IsNormal ty -> declassify_ty env i.i_annot ty in
+        | IsNormal ty -> declassify_ty env annot ty in
       let (msf, venv) = ty_lval env msf_e x ty in
       let msf = if vfty = IsMsf then MSF.add (reg_lval ~direct:true loc x) msf else msf in
       (msf, venv) in
-    let msf = if is_Modified modmsf then MSF.toinit else msf in
-    List.fold_left2 output_ty (msf, venv) xs tyout
+    let msf' = if is_Modified modmsf then MSF.toinit else msf in
+    let msf', venv' = List.fold_left2 output_ty (msf', venv) xs tyout in
+
+    let msf', venv' =
+      if Prog.is_inline annot (FEnv.get_fun_def fenv f).f_cc
+      then msf', venv'
+      else
+       let msf' = MSF.after_call ~loc msf' annot tyout xs in
+       let venv' = Env.after_call env venv' fty.out_guaranteed_constant xs in
+       msf', venv'
+    in
+    (*Format.printf "AFTER:@.%a\n@." Env.pp_venv venv';*)
+    (msf', venv')
 
 and ty_cmd is_ct_asm fenv env msf_e c =
-  List.fold_left (ty_instr is_ct_asm fenv env) msf_e c
+  let f (msf, venv) i =
+    let print = Annotations.has_symbol "debugsct" i.i_annot in
+    if print then
+      Format.printf
+        "==== Checking %a ====\nBEFORE:@.%a@ %a\n"
+        L.pp_iloc i.i_loc
+        MSF.pp msf
+        Env.pp_venv venv;
+    let msf', venv' = ty_instr is_ct_asm fenv env (msf, venv) i in
+    if print then
+      Format.printf "AFTER:@.%a@ %a\n@." MSF.pp msf' Env.pp_venv venv';
+    (msf', venv')
+  in
+  List.fold_left f msf_e c
 
 
 (* ------------------------------------------------------------------- *)
@@ -1354,8 +1517,13 @@ let init_constraint fenv f =
         | Inline, Direct _ -> ()
         | Global, Direct _ -> ()
         | _ ->
-          error ~loc
-            "invalid security annotations for %a" pp_var x
+          error
+            ~loc
+            "@[<h>invalid security annotations for the variable %a.@]@.\
+             @[<h>The kind of this variable is %a, but the annotation is %a.@]"
+            pp_var x
+            PrintCommon.pp_kind x.v_kind
+            pp_vty ty
         end; ty in
     msf, vty in
 
@@ -1452,14 +1620,22 @@ let init_constraint fenv f =
   let modmsf = modmsf_c fenv f.f_body in
   let umodmsf =
     Annot.ensure_uniq
-       ["modmsf", (fun a -> Annot.none a; true);
-        "nomodmsf", (fun a -> Annot.none a; false)] f.f_annot.f_user_annot in
-  begin match umodmsf with
-  | None -> ()
-  | Some annot ->
-      if annot <> is_Modified modmsf then
-        let sannot = if annot then "modmsf" else "nomodmsf" in
-        error ~loc:f.f_loc "annotation %s should be %a" sannot pp_modmsf modmsf
+       [smodmsf, (fun a -> Annot.none a; true);
+        snomodmsf, (fun a -> Annot.none a; false)] f.f_annot.f_user_annot in
+  begin match umodmsf, modmsf with
+  | Some true, NotModified ->
+      error
+        ~loc:f.f_loc
+        "this function is annotated as %s, but it does not modify the MSF"
+        snomodmsf
+  | Some false, Modified(l, tr) ->
+      error
+        ~loc:f.f_loc
+        "this function is annotated as %s, but it modifies the MSF at %a.@ %a"
+        snomodmsf
+        L.pp_iloc l
+        pp_modmsf_trace tr
+  | _, _ -> ()
   end;
 
   env, venv, tyin, tyout, modmsf
@@ -1523,7 +1699,20 @@ and ty_fun_infer is_ct_asm fenv fn =
   let to_keep = List.fold_left add (List.fold_left add [n1; s1] tyin) tyout in
 
   C.prune constraints to_keep;
-  let fty = { modmsf; tyin; tyout; constraints; resulting_corruption; } in
+
+  (* We first give a safe guess for [out_guaranteed_constant] to print the type,
+     but recompute it after optimizing. *)
+  let fty =
+    {
+      modmsf;
+      tyin;
+      tyout;
+      constraints;
+      resulting_corruption;
+      out_guaranteed_constant = List.make (List.length tyout) false;
+    }
+  in
+
   if !Glob_options.debug then
     Format.eprintf
       "Before optimization:@.%a@."
@@ -1532,7 +1721,16 @@ and ty_fun_infer is_ct_asm fenv fn =
   let tomax = List.fold_left add [] tyin in
   let tomin = List.fold_left add [n1; s1] tyout in
   C.optimize constraints ~tomin ~tomax;
-  fty
+
+  let out_guaranteed_constant =
+    let is_public_or_secret l = VlPairs.is_public l || VlPairs.is_secret l in
+    let vfty_public_or_secret = function
+      | IsMsf -> true
+      | IsNormal(Direct(l)) | IsNormal(Indirect(l, _)) -> is_public_or_secret l
+    in
+    List.map vfty_public_or_secret tyout
+  in
+  { fty with out_guaranteed_constant }
 
 
 let ty_prog is_ct_asm (prog:('info, 'asm) prog) fl =
@@ -1594,14 +1792,15 @@ let compile_infer_msf (prog:('info, 'asm) prog) =
        tyout;
        constraints; (* dummy info *)
        resulting_corruption; (* dummy info *)
+       out_guaranteed_constant = []; (* dummy info *)
      }  in
    Hf.add fenv.env_ty f.f_name fty
   in
   List.iter infer_fun (List.rev prog);
 
   let do_t = function
-     | IsNormal _ -> Slh_lowering.Slh_None
-     | IsMsf      -> Slh_msf
+     | IsNormal _ -> Slh_ops.Slh_None
+     | IsMsf      -> Slh_ops.Slh_msf
   in
 
   let do_f _fn fty =

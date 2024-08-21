@@ -33,29 +33,6 @@ Section LprogSem.
   Definition goto_targets fb :=
     pmap (λ li, if li_i li is Lgoto lbl then Some lbl else None) fb.
 
-  Definition setfb fd fb : lfundef :=
-    LFundef
-      fd.(lfd_info)
-      fd.(lfd_align)
-      fd.(lfd_tyin)
-      fd.(lfd_arg)
-      fb
-      fd.(lfd_tyout)
-      fd.(lfd_res)
-      fd.(lfd_export)
-      fd.(lfd_callee_saved)
-      fd.(lfd_stk_max)
-      fd.(lfd_frame_size)
-      fd.(lfd_align_args)
-  .
-
-  Definition setfuncs p lf :=
-    {| lp_rip := lp_rip p
-     ; lp_rsp := lp_rsp p
-     ; lp_globs := lp_globs p
-     ; lp_glob_names := lp_glob_names p
-     ; lp_funcs := lf |}.
-
 End LprogSem.
 
 
@@ -95,13 +72,13 @@ Section Tunneling.
     tunnel_engine fn lc lc.
 
   Definition tunnel_lfundef fn fd :=
-    setfb fd (tunnel_lcmd fn (lfd_body fd)).
+    with_lbody fd (tunnel_lcmd fn (lfd_body fd)).
 
   Definition tunnel_funcs :=
     map (fun f => (f.1, tunnel_lfundef f.1 f.2)).
 
   Definition tunnel_lprog p :=
-    setfuncs p (tunnel_funcs (lp_funcs p)).
+    with_lfds p (tunnel_funcs (lp_funcs p)).
 
 End Tunneling.
 

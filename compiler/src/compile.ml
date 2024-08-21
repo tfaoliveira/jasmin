@@ -211,11 +211,134 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       List.iter (warn_extra_fd Arch.pointer_data Arch.asmOp) fds
   in
 
+
+
+  (* TODO: Share this with regalloc. *)
+  let get_rak f =
+    let open Return_address_kind in
+    match f.f_cc with
+    | Export _ -> RAKexport
+    | Internal -> RAKexport
+    | Subroutine _ ->
+      let ral =
+        match f.f_annot.retaddr_kind with
+        | None -> Arch.callstyle
+        | Some ral -> begin
+          match ral with
+          | RAKexport -> assert false
+          | RAKstack -> StackDirect
+          | RAKregister -> Arch.callstyle (* We cannot use ByReg on StackDirect Architectures *)
+          | RAKextra_register -> ByExtraReg
+         end
+      in
+      match ral with
+      | StackDirect -> RAKstack
+      | ByReg oreg -> RAKregister
+      | ByExtraReg -> RAKextra_register
+  in
+
   let slh_info up =
     let p = Conv.prog_of_cuprog up in
-    let ttbl = Sct_checker_forward.compile_infer_msf p in
+    let ty_tbl = Sct_checker_forward.compile_infer_msf p in
+    let rak_tbl = Hf.create 17 in
+    List.iter (fun f -> Hf.add rak_tbl f.f_name (get_rak f)) (snd p);
     fun fn ->
-      try Hf.find ttbl fn with Not_found -> assert false
+      let (tin, tout) = try Hf.find ty_tbl fn with Not_found -> assert false in
+      let rak = try Hf.find rak_tbl fn with Not_found -> assert false in
+      let open Slh_lowering in
+      {
+        slhfi_tin = tin;
+        slhfi_tout = tout;
+        slhfi_rak = rak;
+      }
+  in
+
+  (* TODO_RSB: We should use the function name to check if the user provided the
+     tree in an annotation. *)
+  let pc_return_tree fn ris =
+    (* Create a sorted binary tree with [n] internal nodes labeled
+       [get_label pos, get_label pos+1, ..., get_label pos+n-1].
+       When [n] is 2, [go_left] decides to which side the child node goes. *)
+    let rec tree_structure pos go_left get_label n =
+      let empty = Utils0.BTleaf in
+      let node x t0 t1 = Utils0.BTnode(get_label x, t0, t1) in
+      let single x = node x empty empty in
+      match n with
+      | 0 -> empty
+      | 1 -> single pos
+      | 2 ->
+          if go_left
+          then node (pos + 1) (single pos) empty
+          else node pos empty (single (pos + 1))
+      | _ ->
+          let n0 = (n - 1) / 2 in (* Size of the left tree: at most half. *)
+          let n1 = n - n0 - 1 in  (* Size of the right tree: the rest. *)
+          let pos' = n0 + pos in
+          let t0 = tree_structure pos true get_label n0 in
+          let t1 = tree_structure (pos' + 1) false get_label n1 in
+          node pos' t0 t1
+    in
+
+    (* BEGIN DEBUG *)
+    let rec collect acc = function
+      | Utils0.BTleaf -> acc
+      | Utils0.BTnode((_, x), t0, t1) ->
+          collect (collect (CoreConv.int_of_cz x :: acc) t0) t1
+    in
+    let rec is_sorted = function
+      | Utils0.BTleaf -> true
+      | Utils0.BTnode((_, x), t0, t1) ->
+          let x = CoreConv.int_of_cz x in
+          List.for_all (fun y -> y < x) (collect [] t0)
+          && is_sorted t0
+          && List.for_all (fun y -> y > x) (collect [] t1)
+          && is_sorted t1
+    in
+    let all_tags t =
+      let x = collect [] t in
+      let tags = List.range 0 `To (List.length x - 1) in
+      List.sort compare x = tags
+    in
+    let check n t =
+      if not (all_tags t && is_sorted t)
+      then failwith (Format.sprintf "Error in%s, size %d" fn.fn_name n)
+    in
+    (* END DEBUG *)
+
+    let get_label (pos : int) : Protect_calls.cs_info =
+      try List.find (fun (_, tag) -> Conv.cz_of_int pos = tag) ris
+      with Not_found -> assert false
+    in
+    let t = tree_structure 0 true get_label (List.length ris) in
+    check (List.length ris) t; (* DEBUG *)
+    t
+  in
+
+  let tbl_annot =
+    let tbl = Hf.create 17 in
+    let add (fn, cfd) =
+      let fd = fdef_of_cufdef fn cfd in
+      Hf.add tbl fn fd.f_annot
+    in
+    List.iter add cprog.Expr.p_funcs;
+    tbl
+  in
+
+  let get_annot fn =
+    try Hf.find tbl_annot fn
+    with Not_found ->
+           hierror
+             ~loc:Lnone
+             ~funname:fn.fn_name
+             ~kind:"compiler error"
+             ~internal:true
+             "invalid annotation table."
+  in
+
+  let szs_of_fn fn =
+    match (get_annot fn).stack_zero_strategy with
+    | Some (s, ows) -> Some (s, Option.map Pretyping.tt_ws ows)
+    | None -> None
   in
 
   let tbl_annot =
@@ -280,6 +403,8 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
       Compiler.fresh_id;
       Compiler.fresh_var_ident = Conv.fresh_var_ident;
       Compiler.slh_info;
+      Compiler.protect_calls = !Glob_options.protect_calls;
+      Compiler.pc_return_tree;
       Compiler.stack_zero_info = szs_of_fn;
     }
   in

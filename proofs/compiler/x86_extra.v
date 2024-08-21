@@ -45,6 +45,12 @@ Definition se_protect_arguments (ii : instr_info) : pp_error_loc :=
 Definition se_protect_ptr (ii : instr_info) : pp_error_loc :=
   compiler_util.pp_internal_error_s_at pass_name ii "Found protect_ptr.".
 
+Definition slh_update_after_call (ii : instr_info) : pp_error_loc :=
+  compiler_util.pp_internal_error_s_at
+    pass_name
+    ii
+    "found update_after_call.".
+
 End E.
 
 
@@ -62,6 +68,9 @@ Variant x86_extra_op : Type :=
 | Ox86SLHmove
 | Ox86SLHprotect of wsize
 
+(* This takes an MSF to update. It will be compiled down to [Ox86SLHupdate] once
+   [cond] is determined. *)
+| Ox86SLHupdate_after_call
 .
 
 Scheme Equality for x86_extra_op.
@@ -199,6 +208,19 @@ Definition Ox86SLHprotect_instr :=
                   (@se_protect_large_sem ws)
                   [::].
 
+Definition Ox86SLHupdate_after_call_str : string :=
+  "Ox86_update_after_call".
+
+Definition Ox86SLHupdate_after_call_instr : instruction_desc :=
+  mk_instr_desc
+    (pp_s Ox86SLHupdate_after_call_str)
+    [:: ty_msf ]
+    [:: E 0 ]
+    [:: ty_msf; ty_msf ] (* A scratch register and an MSF. *)
+    [:: E 1; E 0 ]
+    (x86_se_update_sem true)
+    [::].
+
 Definition get_instr_desc o :=
   match o with
   | Oset0 ws         => Oset0_instr ws
@@ -211,6 +233,7 @@ Definition get_instr_desc o :=
   | Ox86SLHupdate     => Ox86SLHupdate_instr
   | Ox86SLHmove       => Ox86SLHmove_instr
   | Ox86SLHprotect ws => Ox86SLHprotect_instr ws
+  | Ox86SLHupdate_after_call => Ox86SLHupdate_after_call_instr
   end.
 
 Definition prim_string :=
@@ -334,6 +357,7 @@ Definition assemble_extra ii o outx inx : cexec (seq (asm_op_msb_t * lexprs * re
   | Ox86SLHupdate => assemble_slh_update ii outx inx
   | Ox86SLHmove => assemble_slh_move outx inx
   | Ox86SLHprotect ws => assemble_slh_protect ii ws outx inx
+  | Ox86SLHupdate_after_call => Error (E.slh_update_after_call ii)
   end.
 
 #[global]

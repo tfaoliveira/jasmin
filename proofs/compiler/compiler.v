@@ -28,6 +28,7 @@ Require Import
   lowering
   makeReferenceArguments
   propagate_inline
+  protect_calls
   slh_lowering
   remove_globals
   stack_alloc
@@ -104,6 +105,7 @@ Variant compiler_step :=
   | RegAllocation               : compiler_step
   | DeadCode_RegAllocation      : compiler_step
   | Linearization               : compiler_step
+  | ProtectCalls                : compiler_step
   | StackZeroization            : compiler_step
   | Tunneling                   : compiler_step
   | Assembly                    : compiler_step.
@@ -136,6 +138,7 @@ Definition compiler_step_list := [::
   ; RegAllocation
   ; DeadCode_RegAllocation
   ; Linearization
+  ; ProtectCalls
   ; StackZeroization
   ; Tunneling
   ; Assembly
@@ -184,8 +187,10 @@ Record compiler_params
   lowering_opt     : lowering_options;
   fresh_id         : glob_decls -> var -> Ident.ident;
   fresh_var_ident  : v_kind -> instr_info -> int -> string -> stype -> Ident.ident;
-  slh_info         : _uprog → funname → seq slh_t * seq slh_t;
+  slh_info         : _uprog → funname → slh_function_info;
   stack_zero_info  : funname -> option (stack_zero_strategy * option wsize);
+  protect_calls    : bool;
+  pc_return_tree   : funname -> seq cs_info -> bintree cs_info;
 }.
 
 Context
@@ -203,6 +208,7 @@ Notation saparams := (ap_sap aparams).
 Notation liparams := (ap_lip aparams).
 Notation loparams := (ap_lop aparams).
 Notation shparams := (ap_shp aparams).
+Notation pcparams := (ap_pcp aparams).
 Notation agparams := (ap_agp aparams).
 
 #[local]
@@ -299,11 +305,18 @@ Definition compiler_first_part (to_keep: seq funname) (p: prog) : cexec uprog :=
       pg
   in
   let p := cparams.(print_uprog) LowerInstruction p in
+  Let p :=
+    lower_slh_prog
+      shparams
+      (cparams.(slh_info) p)
+      cparams.(protect_calls)
+      to_keep
+      p
+  in
 
   Let p := propagate_inline.pi_prog p in
   let p := cparams.(print_uprog) PropagateInline p in
 
-  Let p := lower_slh_prog shparams (cparams.(slh_info) p) to_keep p in
   let p := cparams.(print_uprog) SLHLowering p in
 
   ok p.
@@ -422,6 +435,16 @@ Definition compiler_back_end entries (pd: sprog) :=
   Let _ := merge_varmaps.check pd var_tmps in
   Let pl := linear_prog liparams pd in
   let pl := cparams.(print_linear) Linearization pl in
+
+  Let pl :=
+    protect_calls.pc_lprog
+      pcparams
+      cparams.(pc_return_tree)
+      entries
+      cparams.(protect_calls)
+      pl
+  in
+  let pl := cparams.(print_linear) ProtectCalls pl in
   (* stack zeroization                 *)
   let szs_of_fn fn :=
     match cparams.(stack_zero_info) fn with

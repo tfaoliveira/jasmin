@@ -471,11 +471,11 @@ Context
   {sCP : semCallParams}
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
-  (fun_info : funname -> seq slh_t * seq slh_t)
+  (fun_info : funname -> slh_function_info)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info entries p = ok p').
+  (hp : lower_slh_prog shparams fun_info false entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).
@@ -790,11 +790,11 @@ Context
   {dc : DirectCall}
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
-  (fun_info : funname -> seq slh_t * seq slh_t)
+  (fun_info : funname -> slh_function_info)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info entries p = ok p').
+  (hp : lower_slh_prog shparams fun_info false entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).

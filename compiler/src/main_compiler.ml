@@ -146,6 +146,22 @@ let main () =
     (* The source program, before any compilation pass. *)
     let source_prog = prog in
 
+    let chk_ret_addr_annot fd =
+      let is_subroutine =
+        match fd.f_cc with
+        | FInfo.Subroutine _ -> true
+        | _ -> false
+      in
+      if is_subroutine
+      then
+        let err = hierror ~loc:(Lone fd.f_loc) ~kind:"return address kinds" in
+        let s = if !Glob_options.protect_calls then "" else "not " in
+        let is_mmx = fd.f_annot.retaddr_kind = Some RAKextra_register in
+        if !Glob_options.protect_calls <> is_mmx
+        then err "invalid return address kind (should %sbe MMX)" s
+    in
+    List.iter chk_ret_addr_annot (snd source_prog);
+
     (* This function is called after each compilation pass.
         - Check program safety (and exit) if the time has come
         - Pretty-print the program

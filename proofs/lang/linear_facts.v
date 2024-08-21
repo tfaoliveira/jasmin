@@ -2,6 +2,7 @@ From Coq Require Import Relations.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
 
 Require Import
+  expr
   fexpr_facts
   label
   linear
@@ -27,6 +28,18 @@ Context
   {sip : SemInstrParams asm_op syscall_state}
   {ovm_i : one_varmap_info}
 .
+
+Lemma lfd_body_with_lbody fd fb : lfd_body (with_lbody fd fb) = fb.
+Proof. by move: fd => []. Qed.
+
+Lemma with_lbody_lfd_body fd : with_lbody fd (lfd_body fd) = fd.
+Proof. by move: fd => []. Qed.
+
+Lemma lp_funcs_with_lfds p lf : lp_funcs (with_lfds p lf) = lf.
+Proof. by move: p => []. Qed.
+
+Lemma with_lfds_lp_funcs p : with_lfds p (lp_funcs p) = p.
+Proof. by move: p => []. Qed.
 
 Lemma setpc_id ls :
   setpc ls (lpc ls) = ls.

@@ -362,6 +362,10 @@ move => x xs ih ys' /=; t_xrbindP => z ok_z ys ok_ys <- [| n ] hsz /= ok_y.
 exact: (ih _ ok_ys n hsz ok_y).
 Qed.
 
+Lemma mapM_cons_not_nil eT xT yT (f : xT -> result eT yT) x xs :
+  mapM f (x :: xs) <> ok [::].
+Proof. rewrite /mapM -/(mapM _ xs). case: (f x) => //=. by case: mapM. Qed.
+
 Lemma mapMP {eT} {aT bT: eqType} (f: aT -> result eT bT) (s: seq aT) (s': seq bT) y:
   mapM f s = ok s' ->
   reflect (exists2 x, x \in s & f x = ok y) (y \in s').
@@ -1174,6 +1178,25 @@ Definition list_to ub := rev (list_to_rev ub).
 (* is it not just List.flat_map? *)
 Definition conc_map aT bT (f : aT -> seq bT) (l : seq aT) :=
   flatten (map f l).
+
+Definition conc_mapM eT aT bT (f : aT -> result eT (seq bT)) (l : seq aT) :=
+  Let x := mapM f l in ok (flatten x).
+
+Lemma conc_mapM_consI {eT xT yT x xs ys} {f : xT -> result eT (seq yT)} :
+  conc_mapM f (x :: xs) = ok ys ->
+  exists ys0 yss,
+    [/\ f x = ok ys0
+      , conc_mapM f xs = ok yss
+      & ys = ys0 ++ yss
+    ].
+Proof.
+  rewrite /conc_mapM.
+  t_xrbindP=> -[|ys0 yss] hyss ?; subst ys.
+  - by move: (mapM_cons_not_nil hyss).
+  move: hyss => /mapM_cons [-> ->].
+  eexists; by eexists.
+Qed.
+
 
 (* -------------------------------------------------------------------------- *)
 (* Operators to build comparison                                              *)
@@ -2003,6 +2026,24 @@ Qed.
 Lemma map_const_nseq A B (l : list A) (c : B) : map (fun=> c) l = nseq (size l) c.
 Proof. by elim: l => // > ? /=; f_equal. Qed.
 
+Inductive bintree (A : Type) : Type :=
+  | BTleaf
+  | BTnode of A & bintree A & bintree A
+.
+Arguments BTleaf {_}.
+
+Definition is_nil {X} (xs : seq X) : bool :=
+  if xs is [::] then true else false.
+
+Fixpoint assoc_right
+  {aT : Type} {bT : eqType} (s : seq (aT * bT)) (b : bT) : option aT :=
+  if s is (a, b') :: s
+  then if b == b' then Some a else assoc_right s b
+  else None.
+
+Lemma assoc_rightE aT {bT : eqType} (s : seq (aT * bT)) (b : bT) :
+  assoc_right s b = assoc [seq (p.2, p.1) | p <- s ] b.
+Proof. by elim: s => //= -[??] ? ->. Qed.
 
 Section RT_TRANSN.
 

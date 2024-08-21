@@ -15,6 +15,8 @@ Variant label_kind :=
 Definition label := positive.
 Bind Scope positive_scope with label.
 
+Definition next_lbl (lbl : label) : label := (lbl + 1)%positive.
+
 Definition remote_label := (funname * label)%type.
 
 (* Indirect jumps use labels encoded as pointers: we assume such an encoding exists.

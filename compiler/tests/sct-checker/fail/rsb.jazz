@@ -1,0 +1,337 @@
+/* -------------------------------------------------------------------------- */
+/* Utils. */
+
+#[test=nosct]
+inline
+fn leak_u64(reg u64 x) {
+    if (x == 0) { [x] = 0; }
+}
+
+#[test=nosct]
+fn do_nothing() {}
+
+#[test=nosct]
+inline
+fn inline_do_nothing() {}
+
+#[test=nosct]
+fn call_do_nothing() {
+    do_nothing();
+}
+
+#[test=nosct]
+inline
+fn inline_call_do_nothing() {
+    do_nothing();
+}
+
+#[test=nosct]
+fn id_msf(reg u64 x) -> #msf reg u64 {
+    return x;
+}
+
+#[test=nosct]
+fn return_msf() -> #msf reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    return msf;
+}
+
+#[test=nosct]
+fn id(reg u64 x) -> reg u64 {
+    return x;
+}
+
+// Leaving this unannotated forces the checker to decide that the result must
+// be public (i.e. to compute [out_guaranteed_public] after optimization).
+#[test=nosct]
+fn return_public_register() -> reg u64 {
+    reg u64 x;
+    x = 0;
+    return x;
+}
+
+#[test=nosct]
+fn return_public_mmx() -> #mmx reg u64 {
+    reg u64 r;
+    r = 0;
+#mmx reg u64 x;
+    x = #MOVX(r);
+    return x;
+}
+
+#[test=nosct]
+inline
+fn return_public_stack() -> stack u64 {
+    stack u64 s;
+    s = 0;
+    return s;
+}
+
+#[test=nosct]
+inline
+fn return_public_stack_array(#public stack u64[1] s) -> #public stack u64[1] {
+    return s;
+}
+
+#[test=nosct]
+fn return_public_ptr(
+  #[public, poly=t] reg ptr u64[1] p
+) ->
+  #[public, poly=t] reg ptr u64[1]
+{
+    return p;
+}
+
+#[test=nosct]
+fn return_public_public_ptr(
+  #[public, public] reg ptr u64[1] p
+) ->
+  #[public, public] reg ptr u64[1]
+{
+    return p;
+}
+
+
+/* -------------------------------------------------------------------------- */
+
+fn archetypical(#public reg u64 pub, #secret reg u64 sec) {
+    reg u64 x;
+    x = id(pub);
+    leak_u64(x);
+    _ = id(sec);
+}
+
+fn transient_after_call_update(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    #update_after_call
+    _ = id_msf(msf);
+    return x;
+}
+
+fn transient_after_call_noupdate(#transient reg u64 x) -> #public reg u64 {
+    _ = #init_msf();
+    do_nothing();
+    return x;
+}
+
+fn transient_after_call_noupdate1(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    do_nothing();
+    return x;
+}
+
+fn transient_after_call_noupdate2(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    msf = id_msf(msf);
+    return x;
+}
+
+fn call_in_while(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    while (x < 5) {
+        msf = #update_msf(x < 5, msf);
+        #update_after_call
+        msf = id_msf(msf);
+    }
+
+    return x;
+}
+
+fn call_in_while_unknown(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    while (x < 5) {
+        do_nothing();
+    }
+
+    return x;
+}
+
+fn call_in_while_noupdate(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    while (x < 5) {
+        msf = #update_msf(x < 5, msf);
+        do_nothing();
+    }
+
+    return x;
+}
+
+fn call_in_for(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        #update_after_call
+        msf = id_msf(msf);
+    }
+
+    return x;
+}
+
+fn call_in_for_noupdate(#transient reg u64 x) -> #public reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+
+    inline int i;
+    i = 1;
+    for i = 0 to i {
+        do_nothing();
+    }
+
+    return x;
+}
+
+fn write_mmx_assign(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_assign2(#secret reg u64 x) -> #secret #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_opn(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = #MOV(x);
+    return m;
+}
+
+inline
+fn write_mmx_ptr(#transient stack u64[1] a) -> reg u64 {
+    #mmx reg ptr u64[1] m;
+    m = a;
+    a = m;
+
+    reg u64 r;
+    r = a[0];
+    return r;
+}
+
+#test=nosct
+fn move_to_mmx(#transient reg u64 x) -> #transient #mmx reg u64 {
+    #mmx reg u64 m;
+    m = x;
+    return m;
+}
+
+fn write_mmx_call(#transient reg u64 x, #msf reg u64 msf) -> #transient reg u64 {
+    #mmx reg u64 m;
+    #update_after_call=msf
+    m = move_to_mmx(x);
+    x = m;
+    return x;
+}
+
+fn write_mmx_call_noupdate(#transient reg u64 x) -> #transient reg u64 {
+    #mmx reg u64 m;
+    m = move_to_mmx(x);
+    x = m;
+    return x;
+}
+
+fn invalid_update_after_call() -> {
+    reg u64 msf;
+    msf = #init_msf();
+    #update_after_call
+    do_nothing();
+}
+
+#[test=nosct]
+fn two_msf() -> #msf reg u64, #msf reg u64 {
+    reg u64 msf0 msf1;
+    msf0 = #init_msf();
+    msf1 = #mov_msf(msf0);
+    return msf0, msf1;
+}
+
+fn update_after_call_many() -> {
+    reg u64 msf0 msf1;
+    #update_after_call
+    msf0, msf1 = two_msf();
+}
+
+fn inline_kills_msf() -> reg u64 {
+    reg u64 msf x;
+    msf = #init_msf();
+    x = 0;
+    inline_call_do_nothing();
+    x = #protect(x, msf);
+    return x;
+}
+
+fn inline_kills_msf2() -> reg u64 {
+    reg u64 msf x;
+    msf = #init_msf();
+    x = 0;
+    #inline
+    call_do_nothing();
+    x = #protect(x, msf);
+    return x;
+}
+
+#nomodmsf
+fn call_modmsf() {
+    do_nothing();
+}
+
+#nomodmsf
+fn inline_modmsf() {
+    #inline
+    call_do_nothing();
+}
+
+fn inline_bool_leaks() {
+    reg u64 x;
+    x = 0;
+
+    inline bool b;
+    b = x > 0;
+    do_nothing();
+    if (b) {
+        _ = #MOV(0);
+    }
+}
+
+export
+fn inline_int_leaks() {
+    reg u64 x;
+    x = 0;
+
+    inline int i;
+    i = (int)x;
+
+    do_nothing();
+
+    stack u64[1] s;
+    s[i] = #MOV(0);
+}
+
+fn pointed_data_is_transient() {
+    stack u64[1] s;
+    s[0] = 1;
+
+    reg ptr u64[1] p;
+    p = s;
+
+    p = return_public_public_ptr(p);
+
+    reg u64 x;
+    x = p[0];
+
+    leak_u64(x);
+}

@@ -1,3 +1,4 @@
+#[test=nosct]
 inline fn leak(#public reg u64 c) { if c != 0 {} }
 
 u8[6] g = "jasmin";
@@ -9,4 +10,26 @@ fn call_kills_msf(#transient reg u64 c) -> #public reg u64 {
   leak(0);
   x = #protect(x, m);
   return x;
+}
+
+fn return_unknown(#transient reg u64 x) -> reg u64, #msf reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    if (x < 0) {
+        if (x > 0) {
+            x = 0;
+        }
+    }
+    return x, msf;
+}
+
+fn return_outdated(#transient reg u64 x) -> reg u64, #msf reg u64 {
+    reg u64 msf;
+    msf = #init_msf();
+    if (x < 0) {
+        x = 0;
+    } else {
+        x = 0;
+    }
+    return x, msf;
 }

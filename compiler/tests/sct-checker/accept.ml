@@ -5,6 +5,7 @@ open Sct_checker_forward
 let path = "success"
 
 let load_and_check name =
+  Jasmin.Utils.nowarning ();
   Format.printf "File %s:@." name;
   let p = load_file (Filename.concat path name) in
   match ty_prog Arch.is_ct_sopn p [] with

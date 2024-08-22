@@ -2,6 +2,7 @@ open Jasmin
 open Common
 
 let () =
+  Jasmin.Utils.nowarning ();
   let p = load_file "error_messages.jazz" in
   let check_fails f =
     match Sct_checker_forward.ty_prog Arch.is_ct_sopn p [ f ] with

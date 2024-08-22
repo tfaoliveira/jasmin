@@ -1,0 +1,60 @@
+fn one_callsite(reg u64 x msf) -> reg u64, #msf reg u64 {
+    msf = #mov_msf(msf);
+    return x, msf;
+}
+
+fn one_callsite2(reg u64 x msf) -> reg u64, #msf reg u64 {
+    msf = #mov_msf(msf);
+    return x, msf;
+}
+
+fn two_callsites(reg u64 x msf) -> reg u64, #msf reg u64 {
+    msf = #mov_msf(msf);
+    return x, msf;
+}
+
+fn three_callsites(reg u64 x msf) -> reg u64, #msf reg u64 {
+    msf = #mov_msf(msf);
+    return x, msf;
+}
+
+export
+fn f0() -> reg u64 {
+    reg u64 x msf;
+    x = 0;
+    msf = #init_msf();
+
+    #update_after_call
+    x, msf = one_callsite(x, msf); // Single caller with update.
+
+    #update_after_call
+    x, msf = two_callsites(x, msf); // Tag: 1
+    x = #protect(x, msf);
+
+    x, msf = three_callsites(x, msf); // Tag: 2
+
+    return x;
+}
+
+export
+fn f1() -> reg u64 {
+    reg u64 x msf;
+    x = 0;
+    msf = #init_msf();
+
+    #update_after_call
+    x, msf = two_callsites(x, msf); // Tag: 0
+    x = #protect(x, msf);
+
+    #update_after_call
+    x, msf = three_callsites(x, msf); // Tag: 1
+    x = #protect(x, msf);
+
+    #update_after_call
+    x, msf = three_callsites(x, msf); // Tag: 0
+    x = #protect(x, msf);
+
+    x, msf = one_callsite2(x, msf); // Single caller without update.
+
+    return x;
+}

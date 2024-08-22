@@ -265,6 +265,162 @@ modmsf fig6b : #[ptr = transient, val = secret] *
 output corruption: #public
  constraints:
 
+File rsb.jazz:
+modmsf leak_u64 : #public ->
+
+output corruption: #public
+ constraints:
+
+
+nomodmsf do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+modmsf call_do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+modmsf inline_call_do_nothing :  ->
+
+output corruption: #public
+ constraints:
+
+
+nomodmsf id_msf : #msf ->
+#msf
+output corruption: #public
+ constraints:
+
+
+modmsf return_msf :  ->
+#msf
+output corruption: #public
+ constraints:
+
+
+nomodmsf id : #poly = { n = ?1025, s = ?1024} ->
+#poly = { n = ?1025, s = ?1024}
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_register :  ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_mmx :  ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_stack :  ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_stack_array : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_ptr : #[ptr = public, val = { n = t, s = t}] ->
+#[ptr = public, val = { n = t, s = t}]
+output corruption: #public
+ constraints:
+
+
+nomodmsf return_public_public_ptr : #[ptr = public, val = public] ->
+#[ptr = public, val = public]
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call : #public ->
+#transient
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call_noupdate : #transient ->
+#transient
+output corruption: #public
+ constraints:
+
+
+modmsf transient_after_call_update : #transient ->
+#transient
+output corruption: #public
+ constraints:
+
+
+modmsf protect_after_call : #public * #msf ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_ignored : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf inline_ignored2 : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf call_in_if : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf call_in_while : #transient ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf write_mmx_public : #public ->
+#public
+output corruption: #public
+ constraints:
+
+
+nomodmsf write_mmx_protected : #transient * #msf ->
+#public
+output corruption: #public
+ constraints:
+
+
+modmsf public_return_is_public :  ->
+
+output corruption: #public
+ constraints:
+
+
+modmsf call_initializes_msf :  ->
+#msf
+output corruption: #public
+ constraints:
+
 
 File spill.jazz:
 nomodmsf spill1 : #public * #secret ->

@@ -1,5 +1,5 @@
 // This should kill the MSFs even if the outer if is inline.
-inline
+#[test=nosct]
 fn f(reg u64 a) -> reg u64 {
     #inline
     if (true) {

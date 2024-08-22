@@ -16,11 +16,19 @@ Failed as expected should_be_a_msf: speculative constant type checker: p should 
 Failed as expected at_least_transient: speculative constant type checker: security annotation for p should be at least transient
 Failed as expected unbound_level: speculative constant type checker: unbound security level hello
 Failed as expected inconsistent_constraint: speculative constant type checker: cannot add constraint secret <= public, it is inconsistent
-Failed as expected bad_modmsf: speculative constant type checker: annotation modmsf should be nomodmsf
-Failed as expected bad_nomodmsf: speculative constant type checker: annotation nomodmsf should be modmsf
-Failed as expected call_bad_nomodmsf: speculative constant type checker: annotation nomodmsf should be modmsf
-Failed as expected call_bad_nomodmsf2: speculative constant type checker: annotation nomodmsf should be modmsf
-Failed as expected call_bad_nomodmsf3: speculative constant type checker: annotation nomodmsf should be modmsf
+Failed as expected bad_modmsf: speculative constant type checker: this function is annotated as nomodmsf, but it does not modify the MSF
+Failed as expected bad_nomodmsf: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
+                                 "error_messages.jazz", line 91 (2-18).
+
+Failed as expected call_bad_nomodmsf: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
+                                      "error_messages.jazz", line 96 (2) to line 98 (3).
+
+Failed as expected call_bad_nomodmsf2: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
+                                       "error_messages.jazz", line 110 (2) to line 113 (3).
+
+Failed as expected call_bad_nomodmsf3: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
+                                       "error_messages.jazz", line 127 (2) to line 130 (3).
+
 Failed as expected call_modmsf_destroys: speculative constant type checker: 
                                          this function call destroys MSFs and { msf } are required.
                                          Trace:

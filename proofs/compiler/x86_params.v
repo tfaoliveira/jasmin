@@ -225,7 +225,7 @@ Section WITH_ERR.
 
   Definition x86_fop_protect_64 (x msf : var_i) : fopn_args :=
     let les := lexpr_flags ++ [:: LLvar x ] in
-    (les, Oasm (ExtOp (Ox86SLHprotect U64)), [:: rvar x; rvar msf ]).
+    (les, Oasm (ExtOp (Ox86SLHprotect Normal U64)), [:: rvar x; rvar msf ]).
 
   (* TODO_RSB: Use [x86_free_stack_frame]. *)
   Definition x86_lcmd_pop (rsp x : var_i) : seq fopn_args :=

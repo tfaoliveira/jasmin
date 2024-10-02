@@ -864,15 +864,21 @@ Section PROOF.
         rewrite /x86_VPAND /x86_u128_binop /=.
         by rewrite (wsize_nle_u64_check_128_256 hty) /=.
       (* Olor Op_w *)
-      + case: eqP; last by rewrite andbF => _ _ /=; case: ifP.
+      + case: (_ =P ty) => /=; last by rewrite andbF !if_same.
         move => ?; subst ty; rewrite /= /sem_sop2 /=; t_xrbindP => v1 ok_v1 v2 ok_v2.
         move => ? /to_wordI' [sz1] [w1] [hw1 ??]; subst.
         move => ? /to_wordI' [sz2] [w2] [hw2 ??]; subst.
         move => ?; subst v.
         move: Hv'; rewrite /truncate_val /= truncate_word_u => /ok_inj ?; subst v'.
-        case hty: (_ ≤ _)%CMP; rewrite /exec_sopn /sopn_sem /= ok_v1 ok_v2 /= !truncate_word_le // {hw1 hw2} /=.
+        case hty: (_ <= _)%CMP;
+          first case: andP => [[_ /eqP ?]| _];
+          subst;
+          rewrite /exec_sopn /sopn_sem /= ok_v1 ok_v2 /= !truncate_word_le // {hw1 hw2} /=.
+        * (* POR *)
+          split; first by rewrite read_es_swap.
+          by rewrite /x86_POR /= Hw.
         * (* OR *)
-          split. by rewrite read_es_swap.
+          split; first by rewrite read_es_swap.
           by rewrite /x86_OR /check_size_8_64 hty /= Hw.
         (* VPOR *)
         rewrite /x86_VPOR /x86_u128_binop /=.
@@ -1789,7 +1795,7 @@ Section PROOF.
     have [s2' [Hs2'1 Hs2'2]] := Hc Hc1 _ Hs1'.
     have [s3' [Hs3'1 Hs3'2 Hs3'3]] :=
       lower_condition_corr
-        dummy_instr_info
+        ii
         Hcond
         Hs2'2
         (eeq_exc_sem_pexpr Hdisje Hs2'2 Hz).
@@ -1816,7 +1822,7 @@ Section PROOF.
     have [s2' [Hs2'1 Hs2'2]] := Hc Hc1 _ Hs1'.
     have [s3' [Hs3'1 Hs3'2 Hs3'3]] :=
       lower_condition_corr
-        dummy_instr_info
+        ii
         Hcond
         Hs2'2
         (eeq_exc_sem_pexpr Hdisje Hs2'2 Hz).

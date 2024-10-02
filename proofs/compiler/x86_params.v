@@ -147,6 +147,12 @@ Definition x86_loparams : lowering_params lowering_options :=
 
 Definition lv_none_flags := nseq 5 (Lnone dummy_var_info sbool).
 
+Definition is_mmx_protect (ws : wsize) (lvs : seq lval) : bool :=
+  match ws, lvs with
+  | U64, [:: Lvar y ] => is_regx y
+  | _, _ => false
+  end.
+
 Definition x86_sh_lower
   (lvs : seq lval)
   (slho : slh_op)
@@ -161,12 +167,13 @@ Definition x86_sh_lower
   | SLHmove   => Some (lvs, O (Ox86SLHmove), es)
 
   | SLHprotect ws =>
-      let extra :=
-        if (ws <= U64)%CMP
-        then lv_none_flags
-        else [:: Lnone dummy_var_info (sword ws)]
-      in
-      Some (extra ++ lvs, O (Ox86SLHprotect ws), es)
+    let: (rk, extra) :=
+      if (ws <= U64)%CMP
+      then
+        if is_mmx_protect ws lvs then (Extra, [::]) else (Normal, lv_none_flags)
+      else (Normal, [:: Lnone dummy_var_info (sword ws) ])
+    in
+    Some (extra ++ lvs, O (Ox86SLHprotect rk ws), es)
 
   | SLHprotect_ptr _ | SLHprotect_ptr_fail _ => None (* Taken into account by stack alloc *)
   end.

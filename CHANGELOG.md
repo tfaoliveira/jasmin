@@ -1,6 +1,27 @@
 
 # [unreleased]
 
+## New features
+
+- Support more integer notations
+  ([PR#897](https://github.com/jasmin-lang/jasmin/pull/897)):
+    * Octal: `0O777`, `0o52`
+    * Binary: `0b11101`, `0B11100`
+    * `_` characters: `100_000_00___111`
+
+- Extraction as EasyCrypt code targets version 2024.09
+  ([PR #910](https://github.com/jasmin-lang/jasmin/pull/910)).
+
+- Local variables may be initialized when declared, as for instance
+  `reg u32 x = 1, y, z = 2; stack u64 s = 1, u, t = z;`
+  ([PR #908](https://github.com/jasmin-lang/jasmin/pull/908)).
+
+- The SCT checker now allows protecting in MMX registers
+  ([PR #917](https://github.com/jasmin-lang/jasmin/pull/917)).
+
+- Add support for the MMX instruction `POR`
+  ([PR #917](https://github.com/jasmin-lang/jasmin/pull/917)).
+
 ## Bug fixes
 
 - Easycrypt extraction for CT : fix decreasing for loops
@@ -20,6 +41,14 @@
   ([PR #892](https://github.com/jasmin-lang/jasmin/pull/892));
   fixes [#870](https://github.com/jasmin-lang/jasmin/issues/870)).
 
+- Safety checker handles dynamically scoped global variables
+  ([PR #890](https://github.com/jasmin-lang/jasmin/pull/890);
+  fixes [#662](https://github.com/jasmin-lang/jasmin/issues/662)).
+
+- Adding label to global variables in assembly generation to avoid name conflicts
+  ([PR #907](https://github.com/jasmin-lang/jasmin/pull/907);
+  fixes [#871](https://github.com/jasmin-lang/jasmin/issues/871)).
+
 ## Other changes
 
 - The deprecated legacy interface to the LATEX pretty-printer has been removed
@@ -31,6 +60,19 @@
 - Preserve formatting of integer literals in the lexer and when pretty-printing to LATEX
   ([PR #886](https://github.com/jasmin-lang/jasmin/pull/886)).
 
+- Improve handling of instruction `LEA` in the safety checker
+  ([PR #900](https://github.com/jasmin-lang/jasmin/pull/900)).
+
+- Extraction to EasyCrypt for safety verification is now removed, it was
+  deprecated in the previous release
+  ([PR #846](https://github.com/jasmin-lang/jasmin/pull/846)).
+
+- Various improvements to the LATEX pretty-printer
+  ([PR #916](https://github.com/jasmin-lang/jasmin/pull/916)).
+
+- Extraction to Easycrypt is now available as a separate `jasmin2ec` tool; the
+  `-ec`, `-oec`, `-oecarray` and `-CT` command-line options are deprecated
+  ([PR #914](https://github.com/jasmin-lang/jasmin/pull/914)).
 
 # Jasmin 2024.07.0 — Sophia-Antipolis, 2024-07-09
 

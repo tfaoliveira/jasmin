@@ -1,4 +1,5 @@
 open Annotations
+open Utils
 (* -------------------------------------------------------------------- *)
 module L = Location
 
@@ -24,7 +25,9 @@ type castop1 = CSS of sowsize | CVS of svsize
 type castop = castop1 L.located option
 
 type int_representation = string
-let parse_int = Z.of_string
+let parse_int (i: int_representation) : Z.t =
+  let s = String.filter (( <> ) '_') i in
+  Z.of_string s
 
 let bits_of_wsize : wsize -> int = Annotations.int_of_ws 
 
@@ -211,7 +214,11 @@ type align = [`Align | `NoAlign]
 
 type plvals = annotations L.located option * plvalue list
 
-type vardecls = pstotype * pident list
+
+type vardecl = pident * pexpr option
+type vardecls = pstotype * vardecl L.located list
+
+let var_decl_id (v, _ : vardecl) : pident = v
 
 type pinstr_r =
   | PIArrayInit of pident
@@ -252,11 +259,13 @@ type pcall_conv = [
   | `Inline
 ]
 
+type paramdecls = pstotype * pident list
+
 type pfundef = {
   pdf_annot : annotations;
   pdf_cc   : pcall_conv option;
   pdf_name : pident;
-  pdf_args : (annotations * vardecls) list;
+  pdf_args : (annotations * paramdecls) list;
   pdf_rty  : (annotations * pstotype) list option;
   pdf_body : pfunbody;
 }

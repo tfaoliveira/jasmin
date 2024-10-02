@@ -250,11 +250,7 @@ Definition inlining (to_keep: seq funname) (p: uprog) : cexec uprog :=
 
 Definition compiler_first_part (to_keep: seq funname) (p: prog) : cexec uprog :=
 
-  Let p :=
-    array_copy_prog
-      (fresh_var_ident cparams Inline dummy_instr_info 0 "i__copy" sint)
-      (λ ws, fresh_var_ident cparams (Reg (Normal, Direct)) dummy_instr_info 0 "tmp" (sword ws))
-      p in
+  Let p := array_copy_prog (λ k, cparams.(fresh_var_ident) k dummy_instr_info 0) p in
   let p := cparams.(print_uprog) ArrayCopy p in
 
   let p := add_init_prog p in
@@ -305,6 +301,10 @@ Definition compiler_first_part (to_keep: seq funname) (p: prog) : cexec uprog :=
       pg
   in
   let p := cparams.(print_uprog) LowerInstruction p in
+
+  Let p := propagate_inline.pi_prog p in
+  let p := cparams.(print_uprog) PropagateInline p in
+
   Let p :=
     lower_slh_prog
       shparams
@@ -313,10 +313,6 @@ Definition compiler_first_part (to_keep: seq funname) (p: prog) : cexec uprog :=
       to_keep
       p
   in
-
-  Let p := propagate_inline.pi_prog p in
-  let p := cparams.(print_uprog) PropagateInline p in
-
   let p := cparams.(print_uprog) SLHLowering p in
 
   ok p.

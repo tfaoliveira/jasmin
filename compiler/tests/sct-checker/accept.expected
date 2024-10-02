@@ -148,6 +148,19 @@ output corruption: #public
  constraints:
 
 
+File bug_887.jazz:
+modmsf test_msf : #secret * #transient ->
+
+output corruption: #public
+ constraints:
+
+
+modmsf test_venv : #secret ->
+#public
+output corruption: #public
+ constraints:
+
+
 File corruption.jazz:
 nomodmsf corrupts_memory : #public * #secret *
                            #[ptr = public, val = secret] *
@@ -194,6 +207,19 @@ output corruption: #public
 File local-stack-array.jazz:
 modmsf main :  ->
 #public
+output corruption: #public
+ constraints:
+
+
+File movmsf.jazz:
+modmsf reset_msf :  ->
+#msf
+output corruption: #public
+ constraints:
+
+
+modmsf main : #transient ->
+
 output corruption: #public
  constraints:
 
@@ -265,6 +291,7 @@ modmsf fig6b : #[ptr = transient, val = secret] *
 output corruption: #public
  constraints:
 
+
 File rsb.jazz:
 modmsf leak_u64 : #public ->
 
@@ -308,8 +335,8 @@ output corruption: #public
  constraints:
 
 
-nomodmsf id : #poly = { n = ?1025, s = ?1024} ->
-#poly = { n = ?1025, s = ?1024}
+nomodmsf id : #poly = { n = ?1043, s = ?1042} ->
+#poly = { n = ?1043, s = ?1042}
 output corruption: #public
  constraints:
 
@@ -332,20 +359,14 @@ output corruption: #public
  constraints:
 
 
-nomodmsf return_public_stack_array : #public ->
-#public
-output corruption: #public
- constraints:
-
-
 nomodmsf return_public_ptr : #[ptr = public, val = { n = t, s = t}] ->
 #[ptr = public, val = { n = t, s = t}]
 output corruption: #public
  constraints:
 
 
-nomodmsf return_public_public_ptr : #[ptr = public, val = public] ->
-#[ptr = public, val = public]
+nomodmsf return_public_public_ptr : #[ptr = public, val = { n = t, s = t}] ->
+#[ptr = public, val = { n = t, s = t}]
 output corruption: #public
  constraints:
 

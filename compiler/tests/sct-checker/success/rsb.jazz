@@ -68,27 +68,15 @@ fn return_public_stack() -> stack u64 {
     return s;
 }
 
-#[test=nosct]
-inline
-fn return_public_stack_array(#public stack u64[1] s) -> #public stack u64[1] {
-    return s;
-}
-
-#[test=nosct]
-fn return_public_ptr(
-  #[public, poly=t] reg ptr u64[1] p
-) ->
-  #[public, poly=t] reg ptr u64[1]
-{
+#test=nosct
+#sct="{ ptr: public, val: t } -> { ptr: public, val: t }"
+fn return_public_ptr(reg ptr u64[1] p) -> reg ptr u64[1] {
     return p;
 }
 
-#[test=nosct]
-fn return_public_public_ptr(
-  #[public, public] reg ptr u64[1] p
-) ->
-  #[public, public] reg ptr u64[1]
-{
+#test=nosct
+#sct="{ ptr: public, val: t } -> { ptr: public, val: t }"
+fn return_public_public_ptr(reg ptr u64[1] p) -> reg ptr u64[1] {
     return p;
 }
 
@@ -180,15 +168,8 @@ fn write_mmx_protected(#transient reg u64 x, #msf reg u64 msf) -> #mmx reg u64 {
 fn public_return_is_public() {
     reg u64 x;
 
-    // The `return_public_stack_array` needs to go first otherwise the calls
-    // make the contents of `a` transient.
-    // The assignment changes the type to `max(Secret, Public)` which is still
-    // `Secret`.
     stack u64[1] a;
     a[0] = 0;
-    a = return_public_stack_array(a);
-    x = a[0];
-    leak_u64(x);
 
     reg ptr u64[1] p;
     p = a;

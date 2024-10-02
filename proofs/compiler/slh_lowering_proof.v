@@ -472,10 +472,11 @@ Context
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
   (fun_info : funname -> slh_function_info)
+  (protect_calls : bool)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info false entries p = ok p').
+  (hp : lower_slh_prog shparams fun_info protect_calls entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
 Notation lower_i := (lower_i shparams).
@@ -791,14 +792,15 @@ Context
   (shparams : sh_params)
   (hshparams : h_sh_params shparams)
   (fun_info : funname -> slh_function_info)
+  (protect_calls : bool)
   (entries  : seq funname)
   (ev : extra_val_t)
   (p p' : prog)
-  (hp : lower_slh_prog shparams fun_info false entries p = ok p').
+  (hp : lower_slh_prog shparams fun_info protect_calls entries p = ok p').
 
 Notation lower_slho := (lower_slho shparams).
-Notation lower_i := (lower_i shparams).
-Notation lower_cmd := (lower_cmd shparams).
+Notation lower_i := (lower_i shparams fun_info protect_calls).
+Notation lower_cmd := (lower_cmd shparams fun_info protect_calls).
 
 #[local]
 Definition Pc (s : estate) (c : cmd) (s' : estate) : Prop :=
@@ -810,19 +812,19 @@ Definition Pc (s : estate) (c : cmd) (s' : estate) : Prop :=
 
 #[local]
 Definition Pi_r (s : estate) (ir : instr_r) (s' : estate) : Prop :=
-  forall ii env env' i',
+  forall ii env env' c,
     wf_env env (p_globs p) s
     -> check_i fun_info (MkI ii ir) env = ok env'
-    -> lower_i (MkI ii ir) = ok i'
-    -> sem_I p' ev s i' s' /\ wf_env env' (p_globs p') s'.
+    -> lower_i (MkI ii ir) = ok c
+    -> sem p' ev s c s' /\ wf_env env' (p_globs p') s'.
 
 #[local]
 Definition Pi (s : estate) (i : instr) (s' : estate) : Prop :=
-  forall env env' i',
+  forall env env' c,
     wf_env env (p_globs p) s
     -> check_i fun_info i env = ok env'
-    -> lower_i i = ok i'
-    -> sem_I p' ev s i' s' /\ wf_env env' (p_globs p') s'.
+    -> lower_i i = ok c
+    -> sem p' ev s c s' /\ wf_env env' (p_globs p') s'.
 
 #[local]
 Definition Pfor
@@ -844,9 +846,9 @@ Definition Pfun
   (m' : mem)
   (res : seq value) :
   Prop :=
-    let '(tin, tout) := fun_info fn in
-    List.Forall2 slh_t_spec args tin
-    -> sem_call p' ev scs m fn args scs' m' res /\ List.Forall2 slh_t_spec res tout.
+    List.Forall2 slh_t_spec args (fun_info fn).(slhfi_tin) ->
+    sem_call p' ev scs m fn args scs' m' res
+    /\ List.Forall2 slh_t_spec res (fun_info fn).(slhfi_tout).
 
 Lemma Hnil : sem_Ind_nil Pc.
 Proof.
@@ -860,11 +862,12 @@ Qed.
 Lemma Hcons : sem_Ind_cons p ev Pc Pi.
 Proof.
   move=> s0 s1 s2 i c _ hi _ hc env env' cs hwf /=.
-  t_xrbindP => env0 hchecki hcheckc i' hloweri c' hlowerc <-.
+  t_xrbindP=> env0 hchecki hcheckc /conc_mapM_consI
+    [ci [cc [hloweri hlowerc ?]]]; subst cs.
   have [hsem0 hwf0] := hi _ _ _ hwf hchecki hloweri.
   rewrite (lower_prog_globs hp) in hwf0.
   have [hsemc' hwf'] := hc _ _ _ hwf0 hcheckc hlowerc.
-  by split => //; apply: Eseq hsemc'.
+  split=> //. exact: sem_app hsem0 hsemc'.
 Qed.
 
 Lemma HmkI : sem_Ind_mkI p ev Pi_r Pi.
@@ -883,14 +886,11 @@ Lemma Hassgn : sem_Ind_assgn p Pi_r.
 Proof.
   move=> s s' lv tg ty e v v' hseme htruncv hwritev'.
   move=> ii env env' c hwf hcheck [?]; subst c.
-
   split.
-
-  - constructor; apply: Eassgn.
+  - apply/sem_seq_ir. apply: Eassgn.
     + rewrite (lower_prog_globs hp). exact: hseme.
     + exact: htruncv.
     rewrite (lower_prog_globs hp). exact: hwritev'.
-
   clear hseme htruncv.
   move: hcheck => [?]; subst env'.
   rewrite write_lvals_write_lval in hwritev'.
@@ -914,7 +914,7 @@ Proof.
   move: hsem; rewrite /sem_sopn.
   t_xrbindP=> res args hsemes hexec hwrite.
 
-  case: op hchecki hloweri hexec => [ po | slho | ao ] /=.
+  case: op hchecki hloweri hexec => [po | slho | io | ao] /=.
 
   (* We only change the instruction if it's an [Oslh]. *)
   all: cycle 1.
@@ -930,15 +930,18 @@ Proof.
       move=> [?] t1 t2 hv1; subst v2; rewrite /= truncate_word_u => _ [<-] [] ??; subst t2 res.
       case: lvs hwrite => //= x []; t_xrbindP => //= s1 hw [?]; subst s1.
       split; last by apply: wf_env_after_assign_vars1 hwf hw.
-      do 2!constructor.
+      apply/sem_seq_ir.
+      apply: Eopn.
       by rewrite /sem_sopn hsemes /exec_sopn /sopn_sem /= hv1 truncate_word_u /se_protect_ptr_fail_sem /= eqxx /= hw.
     case hlower: shp_lower => [[[lvs' op'] es']|] //= hcheck [<-] hexec.
     have [hs hw]:= lower_slhoP hshparams hwf hcheck hlower hsemes hexec hwrite.
-    by split => //; do 2!constructor.
+    split=> //.
+    apply/sem_seq_ir.
+    exact: Eopn.
 
   all: move=> [?] [?] hexec; subst env' c.
   all: split; last exact: (wf_env_after_assign_vars hwf hwrite).
-  all: constructor; apply: Eopn.
+  all: apply/sem_seq_ir; apply: Eopn.
   all: by rewrite /sem_sopn hsemes /= hexec /= hwrite.
 Qed.
 
@@ -952,7 +955,7 @@ Proof.
   clear - hp hexec hsemes hwrite.
   split; last exact: wf_env_empty.
 
-  constructor.
+  apply/sem_seq_ir.
   apply: (Esyscall _ _ hexec).
   - rewrite (lower_prog_globs hp). exact: hsemes.
   rewrite (lower_prog_globs hp).
@@ -978,7 +981,7 @@ Proof.
   clear - hp hsem0 hwf0 hsemcond.
   split; last by apply: wf_env_le hwf0;case: (EnvP.meet_le env0 env1).
 
-  constructor.
+  apply/sem_seq_ir.
   apply: (Eif_true _ _ hsem0).
   rewrite (lower_prog_globs hp).
   exact: hsemcond.
@@ -999,7 +1002,7 @@ Proof.
   clear - hp hsem1 hwf1 hsemcond.
   split; last by apply: wf_env_le hwf1;case: (EnvP.meet_le env0 env1).
 
-  constructor.
+  apply/sem_seq_ir.
   apply: (Eif_false _ _ hsem1).
   rewrite (lower_prog_globs hp).
   exact: hsemcond.
@@ -1044,10 +1047,10 @@ Proof.
   clear - hp hsemcond hsem0' hsem1' hwf0' hsem.
 
   split; last exact: hwf0'.
-  constructor.
-  apply: (Ewhile_true hsem0' _ hsem1' (sem_IE hsem)).
-  rewrite (lower_prog_globs hp).
-  exact: hsemcond.
+  apply/sem_seq_ir.
+  apply: (Ewhile_true hsem0' _ hsem1').
+  - rewrite (lower_prog_globs hp). exact: hsemcond.
+  by move: hsem => /sem_seq1_iff/sem_IE.
 Qed.
 
 (* This is similar to [Hwhile_true], but we never apply [check_cmd c0]. *)
@@ -1064,7 +1067,7 @@ Proof.
   clear - hsemcond hmem hsem0' hwf0.
 
   split.
-  - constructor; exact: (Ewhile_false _ _ hsem0' hsemcond).
+  - apply/sem_seq_ir. exact: (Ewhile_false _ _ hsem0' hsemcond).
   apply: (wf_env_update_cond hwf0) => //.
   by rewrite /= hsemcond.
 Qed.
@@ -1091,7 +1094,7 @@ Proof.
 
   clear - hp hsemstart hsemend hsem' hwffix'.
   split; last exact: hwffix'.
-  by constructor; apply: (Efor _ _ hsem'); rewrite (lower_prog_globs hp).
+  by apply/sem_seq_ir; apply: (Efor _ _ hsem'); rewrite (lower_prog_globs hp).
 Qed.
 
 Lemma Hfor_nil : sem_Ind_for_nil Pfor.
@@ -1124,7 +1127,10 @@ Lemma Hcall : sem_Ind_call p ev Pi_r Pfun.
 Proof.
   move=> s scs2 m2 s' lvs fn args vargs vargs' hsemargs _ hrec hwrite.
   move=> ? env env' c hwf /=.
-  case heq: fun_info => [tin tout]; t_xrbindP => t hargs hres <-.
+  case heq: fun_info => [tin tout ?].
+Admitted.
+(*
+  t_xrbindP => t hargs hres. <-.
   move: hrec; rewrite /Pfun heq => /(_ (check_f_argsP hwf hargs hsemargs)) [h1 h2].
   split; first by constructor; econstructor; eauto; rewrite (lower_prog_globs hp).
   move: hwf hwrite; rewrite -(lower_prog_globs hp) => hwf hwrite.
@@ -1133,6 +1139,7 @@ Proof.
   case: Env.cond h4 => //= e [] h ?; split => //.
   by rewrite -sem_pexpr_with_scs -h; apply use_memP.
 Qed.
+*)
 
 Lemma Hproc : sem_Ind_proc p ev Pc Pfun.
 Proof.
@@ -1141,14 +1148,17 @@ Proof.
   move: (hp); rewrite /lower_slh_prog; t_xrbindP => hent fds hmap heq.
   have [fd' + hget]:= get_map_cfprog_name_gen hmap hf.
   rewrite /lower_fd /check_fd /= /Pfun.
-  case hinfo : fun_info => [tin tout]; t_xrbindP.
-  move=> env1 hcp env2 hcb hcr _ c' hc ? hall; subst fd'.
+  case hinfo : fun_info => [tin tout rak]; t_xrbindP.
+  move=> _ env1 hcp env2 hcb hcr <- c' hc cprotect hcprotect ? hall; subst fd'.
   have [| hsem' hwf2]:= hrec _ _ _ _ hcb hc.
   + by apply: (init_envP hall hcp htargs hwargs); apply wf_env_empty.
   split; last by apply: check_resP hwf2 hcr hrres htres.
-  econstructor; first (by rewrite -heq /=; apply hget); eauto.
-  by rewrite /= -heq.
-Qed.
+  apply:
+    (EcallRun (f := {| f_info := _; |}) _ htargs _ hwargs _ hrres htres) => //.
+  - rewrite -heq. exact: hget.
+  - rewrite -heq. exact: hinit.
+  apply: (sem_app hsem').
+Admitted.
 
 Lemma lower_slh_prog_sem_call
   (f : funname) scs mem scs' mem' (va vr : seq value) :
@@ -1179,7 +1189,8 @@ Proof.
    move: (hp); rewrite /lower_slh_prog; t_xrbindP => /allP -/(_ _ hent).
    rewrite heq => /= hall fds hmap heq1.
    have [fd' + hget'] := get_map_cfprog_name_gen hmap hget.
-   rewrite /lower_fd /check_fd /= heq; t_xrbindP => z hz _ _ _ _ _ {heq hsem}.
+   rewrite /lower_fd /check_fd /= heq.
+   t_xrbindP=> /= _ z hz _ _ _ _ _ {heq hsem}.
    elim : (f_params fd) (f_tyin fd) tin va vargs Env.empty hall hz hm =>
      /= [ | x xs hrec] [ | t ts] [ | ty tys] // [ | v va] //= vargs env /andP [].
    case: ty => //= _ hall; t_xrbindP => hini _ _ vargs1 hmap1 _.

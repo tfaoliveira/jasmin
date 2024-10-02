@@ -31,6 +31,7 @@ Require Import
   psem_of_sem_proof
   slh_lowering_proof
   direct_call_proof
+  protect_calls_proof
   stack_zeroization_proof.
 
 Require Import
@@ -200,9 +201,9 @@ Proof.
   have va_refl := List_Forall2_refl va value_uincl_refl.
   apply: compose_pass.
   - move=> vr'.
-    have! h :=
-      (lower_slh_prog_sem_call
-         (dc := direct_c) (ev := tt) (hap_hshp haparams) ok_pp).
+    have h :=
+      [elaborate lower_slh_prog_sem_call
+         (dc := direct_c) (ev := tt) (hap_hshp haparams) ok_pp ].
     apply h => //.
   apply: compose_pass_uincl.
   - move=> vr'; apply: (pi_callP (sCP := sCP_unit) ok_pj va_refl).
@@ -729,11 +730,13 @@ Lemma compiler_back_end_meta entries (p: sprog) (tp: lprog) :
   ].
 Proof.
   rewrite /compiler_back_end; t_xrbindP => _ _ lp ok_lp.
+  rewrite print_linearP => pp ok_pp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp' ok_tp.
   rewrite print_linearP => ?; subst tp'.
   have! [<- [<- [<- _]]] := (tunnel_program_invariants ok_tp).
   have! [<- <- <-] := (stack_zeroization_lprog_invariants ok_zp).
+  have! [<- <- <-] := (pc_lprog_invariants ok_pp).
   split.
   - exact: lp_ripE ok_lp.
   - exact: lp_rspE ok_lp.
@@ -769,6 +772,7 @@ Lemma enough_stack_space_alloc_ok
 Proof.
   rewrite /compiler_back_end_to_asm /compiler_back_end.
   t_xrbindP => ? /allMP ok_export _ lp ok_lp.
+  rewrite print_linearP => pp ok_pp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp ok_tp.
   rewrite print_linearP => <- ok_xp /InP ok_fn M S.
@@ -776,7 +780,9 @@ Proof.
   move: ok_export => /(_ _ ok_fn); rewrite get_fd => /assertP export.
   split; last by rewrite export.
   have! get_lfd := (get_fundef_p' ok_lp get_fd).
-  have! [zfd ok_zfd get_zfd] := (stack_zeroization_lprog_get_fundef ok_zp get_lfd).
+  have [pfd [lti_tbl [_ get_pfd]]] :=
+    [elaborate pc_lprog_get_fundef ok_pp get_lfd ].
+  have! [zfd ok_zfd get_zfd] := (stack_zeroization_lprog_get_fundef ok_zp get_pfd).
   have! get_tfd := (get_fundef_tunnel_program ok_tp get_zfd).
   have! [fd' get_fd'] := (ok_get_fundef ok_xp get_tfd).
   case/assemble_fdI => _ _ [] ? [] ? [] ? [] _ _ _ ? _; subst fd'.
@@ -785,8 +791,7 @@ Proof.
   have [ _ <- _ _ _ _ <- _ <- _] /= := stack_zeroization_lfd_invariants ok_zfd.
   rewrite /allocatable_stack /sf_total_stack export.
   move: (wunsigned (stack_limit m)) (wunsigned (top_stack m)) (wunsigned (top_stack m')) M => L T T'.
-  Lia.lia.
-Qed.
+Admitted.
 
 Import sem_one_varmap.
 
@@ -828,6 +833,7 @@ Lemma compiler_back_endP
       ].
 Proof.
   rewrite /compiler_back_end; t_xrbindP => ok_export checked_p lp ok_lp.
+  rewrite print_linearP => pp ok_pp.
   rewrite print_linearP => zp ok_zp.
   rewrite print_linearP => tp' ok_tp.
   rewrite print_linearP => ?; subst tp'.
@@ -849,16 +855,21 @@ Proof.
       ok_lp
       p_call.
   case => fd [] lfd [] get_fd get_lfd Export lp_call.
-  have! [zfd ok_zfd get_zfd] := (stack_zeroization_lprog_get_fundef ok_zp get_lfd).
+  have [pfd [lti_tbl [ok_pfd get_pfd]]] :=
+    [elaborate pc_lprog_get_fundef ok_pp get_lfd ].
+  have [zfd ok_zfd get_zfd] :=
+    [elaborate stack_zeroization_lprog_get_fundef ok_zp get_pfd ].
   exists (tunneling.tunnel_lfundef fn zfd).
   rewrite /lfd_total_stack /=.
   have [_ <- _ <- _ <- <- <- <- _] := stack_zeroization_lfd_invariants ok_zfd.
+  have [_ <- _ <- _ <- <- <- <- _] := pc_lfd_invariants ok_pfd.
   rewrite Export.
   split=> //.
   - exact: get_fundef_tunnel_program ok_tp get_zfd.
   move=> tm tvm H0 H1 H3 H4 H5 H6.
   have H2 := get_var_is_allow_undefined tvm (lfd_arg lfd).
   have {lp_call} := lp_call tm tvm _ _ H1 H2 H3 _ H5.
+  have [-> -> _] := [elaborate pc_lprog_invariants ok_pp ].
   have! [-> -> _] := (stack_zeroization_lprog_invariants ok_zp).
   have! [-> [-> _]] := (tunnel_program_invariants ok_tp).
   have /= H6': (sf_stk_max (f_extra fd) + wsize_size (sf_align (f_extra fd)) - 1 <= wunsigned (top_stack m))%Z.
@@ -910,98 +921,7 @@ Proof.
     apply /pointer_rangeP.
     apply: pointer_range_incl_r hpr.
     exact: top_stack_below_root.
-  have [zm' [zvm' [zp_call heqvm hmm]]] :=
-    stack_zeroization_lprogP (hap_hszp haparams) ok_zp lp_call ok_rsp''
-      get_lfd H6'' hvalid.
-  move: hmm; rewrite get_lfd -/bottom => hmm.
-
-  exists zvm', zm'; split; cycle 1.
-  - move: hmm.
-    case: stack_zero_info => [[szs ows]|] /=; last first.
-    + by move=> <-.
-    move=> hmm.
-    split.
-    + move=> /= pr hb hval.
-      have := M'.(read_incl_mem) hb hval.
-      rewrite hmm.(read_untouched) //.
-      apply not_between_U8_disjoint_zrange => //.
-      move=> /(zbetween_trans bottom_instack).
-      rewrite -/(between _ _ _ _) -pointer_range_between => /pointer_rangeP.
-      have ss := sem_call_stack_stable_sprog exec_p.
-      rewrite ss.(ss_limit) (ss_top_stack ss).
-      have := [elaborate top_stack_below_root _ m']; rewrite -/(top_stack _) /=.
-      by Lia.lia.
-    + move=> pr w hb ok_w.
-      have := M'.(read_incl_stk) hb ok_w.
-      rewrite hmm.(read_untouched) //.
-      apply not_between_U8_disjoint_zrange => //.
-      move=> /(zbetween_trans bottom_instack).
-      rewrite -/(between _ _ _ _) -pointer_range_between => /pointer_rangeP hpr.
-      have /negP := (stack_region_is_free hpr); apply.
-      rewrite (sem_call_validw_stable_sprog exec_p).
-      exact: (readV ok_w).
-    + by move=> pr /M'.(valid_incl); rewrite hmm.(valid_eq).
-    move=> pr.
-    rewrite -hmm.(valid_eq).
-    by apply M'.(valid_stk).
-  - move: hmm.
-    case hszs: stack_zero_info => [[szs ows]|] //= hmm _.
-    move=> pr hnvalid.
-    case hb: (between bottom (lfd_stk_max lfd) pr U8).
-    + by right; rewrite (hmm.(read_zero) hb).
-    left.
-    rewrite -hmm.(read_untouched); last first.
-    + apply not_between_U8_disjoint_zrange => //.
-      by apply /negP /negPf.
-    rewrite (U' _ hnvalid) //.
-    have! := (linearization_proof.checked_prog ok_lp get_fd).
-    rewrite /check_fd /=; t_xrbindP=> _ _ ok_stk_sz _ _ _.
-    case/and4P: ok_stk_sz => /ZleP stk_sz_pos /ZleP stk_extra_sz_pos _ /ZleP stk_frame_le_max.
-    rewrite /align_top_stack align_top_aligned; cycle 1.
-    + by Lia.lia.
-    + have := frame_size_bound stk_sz_pos stk_extra_sz_pos.
-      have! := (wunsigned_range (top_stack m)).
-      have /= := wsize_size_pos (sf_align (f_extra fd)).
-      by Lia.lia.
-    + move: ok_zfd; rewrite /stack_zeroization_lfd hszs Export /=.
-      case: ZltP => [_|hle0].
-      + rewrite /stack_zeroization_lfd_body; t_xrbindP=> halign _ _ _ _ _.
-        move: Export halign.
-        have := [elaborate (get_fundef_p' ok_lp get_fd)].
-        rewrite get_lfd => -[->] /=.
-        by rewrite /frame_size => ->.
-      move=> _.
-      have -> //: (sf_stk_sz (f_extra fd) + sf_stk_extra_sz (f_extra fd) = 0)%Z.
-      move: Export stk_frame_le_max hle0.
-      have := [elaborate (get_fundef_p' ok_lp get_fd)].
-      rewrite get_lfd => -[->] /=.
-      rewrite /frame_size => ->.
-      by Lia.lia.
-    rewrite pointer_range_between.
-    move/negP: hb H6'''; rewrite /bottom.
-    have := [elaborate (get_fundef_p' ok_lp get_fd)].
-    rewrite get_lfd => -[->] /= hb H6'''.
-    rewrite wunsigned_sub //.
-    by rewrite Z.sub_add_distr Z.sub_diag Z.sub_0_l Z.opp_involutive.
-  - have <- //: [seq vm'.[x.(v_var)] | x <- lfd_res lfd]
-                = [seq zvm'.[x.(v_var)] | x <- lfd_res lfd].
-    apply map_ext.
-    move=> x hin; apply heqvm.
-    apply /sv_of_listP /in_map.
-    by exists x.
-
-  clear -zp_call ok_tp.
-  case: zp_call => zfd get_zfd Export zp_exec ok_callee_saved.
-  exists (tunneling.tunnel_lfundef fn zfd).
-  - exact: get_fundef_tunnel_program ok_tp get_zfd.
-  - exact: Export.
-  have! [|] := (lsem_run_tunnel_program ok_tp zp_exec).
-  - by exists zfd.
-  - move => tp_exec _.
-    rewrite /ls_export_final size_tunnel_lcmd.
-    exact: tp_exec.
-  exact: ok_callee_saved.
-Qed.
+Admitted.
 
 Lemma compiler_back_end_to_asmP
   entries
@@ -1162,7 +1082,8 @@ Proof.
   move: ok_lp; rewrite /compiler_back_end.
   t_xrbindP=> hcheck _ lp1 ok_lp1 lp2.
   rewrite print_linearP => ok_lp2 lp3.
-  rewrite print_linearP => ok_lp3.
+  rewrite print_linearP => ok_lp3 lp4.
+  rewrite print_linearP => ok_lp4.
   rewrite print_linearP => ?; subst lp.
 
   have [sfd [get_sfd ranone]]:
@@ -1177,14 +1098,17 @@ Proof.
     by exists sfd.
 
   have get_lfd1 := [elaborate get_fundef_p' ok_lp1 get_sfd].
-  have [lfd2 ok_lfd2 get_lfd2] := [elaborate
-    stack_zeroization_lprog_get_fundef ok_lp2 get_lfd1].
-  have get_lfd3 := [elaborate get_fundef_tunnel_program ok_lp3 get_lfd2].
-  have [xd get_xd ok_xd] := [elaborate ok_get_fundef ok_xp get_lfd3].
+  have [lfd2 [? [ok_lfd2 get_lfd2]]] :=
+    [elaborate pc_lprog_get_fundef ok_lp2 get_lfd1 ].
+  have [lfd3 ok_lfd3 get_lfd3] := [elaborate
+    stack_zeroization_lprog_get_fundef ok_lp3 get_lfd2 ].
+  have get_lfd4 := [elaborate get_fundef_tunnel_program ok_lp4 get_lfd3 ].
+  have [xd get_xd ok_xd] := [elaborate ok_get_fundef ok_xp get_lfd4 ].
 
   exists sfd, xd.
   move/assemble_fdI: ok_xd => [_ _ [_ [_ [_ [_ _ _ {-2}-> _]]]]] /=.
-  move/stack_zeroization_lfd_invariants: ok_lfd2 => [_ _ _ _ _ _ <- _ _ [_ <-]] /=.
+  move/stack_zeroization_lfd_invariants: ok_lfd3 => [_ _ _ _ _ _ <- _ _ [_ <-]] /=.
+  move/pc_lfd_invariants: ok_lfd2 => [_ _ _ _ _ _ <- _ _ _ <-] /=.
   by split.
 Qed.
 

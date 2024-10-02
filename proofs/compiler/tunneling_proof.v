@@ -1,4 +1,4 @@
-From mathcomp Require Import all_ssreflect all_algebra.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
 Require Import ZArith.
 Require Import Utf8.
 
@@ -14,7 +14,6 @@ Local Open Scope seq_scope.
 
 Require Import seq_extra unionfind tunneling unionfind_proof.
 Require Import linear_sem.
-
 
 
 Section WITH_PARAMS.
@@ -654,7 +653,7 @@ Section TunnelingProps.
   Proof.
     rewrite /tunnel_lprog_fn_partial /tunnel_lprog_pc /with_lfds.
     move: (tunnel_funcs_fn_partial_pc (lp_funcs p) fn pc).
-    case Hgfd: (get_fundef _ _) => [fd|//]; case: {Hgfd} p => ? ? ? ? //=.
+    case Hgfd: (get_fundef _ _) => [fd|//]; case: {Hgfd} p => ????? //=.
     + by move => Heq Huniq; rewrite Heq.
     by move => ->.
   Qed.
@@ -669,7 +668,7 @@ Section TunnelingProps.
   Proof.
     rewrite /tunnel_lprog_fn_partial /tunnel_lprog_fn => Huniq.
     rewrite tunnel_funcs_fn_partial_eq // /with_lfds.
-    by case: {Huniq} p => ? ? ? ?; case: (get_fundef _ _).
+    by case: {Huniq} p => ?????; case: (get_fundef _ _).
   Qed.
 
   Lemma tunnel_lprog_partial0 p :
@@ -786,7 +785,7 @@ Section TunnelingWFProps.
     well_formed_lprog p ->
     well_formed_lprog (tunnel_lprog_pc p fn pc).
   Proof.
-    case: p => rip rsp globs lf; rewrite /well_formed_lprog /=.
+    case: p => ?????; rewrite /well_formed_lprog /=.
     by apply well_formed_tunnel_funcs_pc.
   Qed.
 
@@ -794,7 +793,7 @@ Section TunnelingWFProps.
     well_formed_lprog p ->
     well_formed_lprog (tunnel_lprog_fn p fn).
   Proof.
-    case: p => rip rsp globs lf; rewrite /well_formed_lprog /=.
+    case: p => ?????; rewrite /well_formed_lprog /=.
     by apply well_formed_tunnel_funcs_fn.
   Qed.
 

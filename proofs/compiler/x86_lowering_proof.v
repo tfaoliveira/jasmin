@@ -1068,7 +1068,7 @@ Section PROOF.
   Proof.
     clear => A B.
     case.
-    1-2: move => >; exact: B.
+    1,2,4: move => >; exact: B.
     case; last by move => >; exact: B.
     case => ws.
     case; try by move => >; exact: B.

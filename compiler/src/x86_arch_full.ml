@@ -202,6 +202,7 @@ module X86_core = struct
     | Ox86SLHupdate     -> true
     | Ox86SLHmove       -> true
     | Ox86SLHprotect _  -> true
+    | Ox86SLHupdate_after_call -> true
 
 end
 

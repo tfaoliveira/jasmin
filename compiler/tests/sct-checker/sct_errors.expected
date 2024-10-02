@@ -18,17 +18,17 @@ Failed as expected unbound_level: speculative constant type checker: unbound sec
 Failed as expected inconsistent_constraint: speculative constant type checker: cannot add constraint secret <= public, it is inconsistent
 Failed as expected bad_modmsf: speculative constant type checker: this function is annotated as nomodmsf, but it does not modify the MSF
 Failed as expected bad_nomodmsf: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
-                                 "error_messages.jazz", line 91 (2-18).
-
+                                 "error_messages.jazz", line 89 (2-18).
+                                 
 Failed as expected call_bad_nomodmsf: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
-                                      "error_messages.jazz", line 96 (2) to line 98 (3).
-
+                                      "error_messages.jazz", line 94 (2) to line 96 (3).
+                                      
 Failed as expected call_bad_nomodmsf2: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
-                                       "error_messages.jazz", line 110 (2) to line 113 (3).
-
+                                       "error_messages.jazz", line 108 (2) to line 111 (3).
+                                       
 Failed as expected call_bad_nomodmsf3: speculative constant type checker: this function is annotated as nomodmsf, but it modifies the MSF at 
-                                       "error_messages.jazz", line 127 (2) to line 130 (3).
-
+                                       "error_messages.jazz", line 125 (2) to line 128 (3).
+                                       
 Failed as expected call_modmsf_destroys: speculative constant type checker: 
                                          this function call destroys MSFs and { msf } are required.
                                          Trace:

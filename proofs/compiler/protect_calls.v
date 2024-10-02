@@ -5,9 +5,8 @@
    tree) for each function.
    The tree must have all the tags as nodes, and be sorted. *)
 From Coq Require Import ZArith.
-From mathcomp Require Import
-  all_algebra
-  all_ssreflect.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssralg.
+From mathcomp Require path.
 From mathcomp.word Require Import word_ssrZ.
 
 Require Import
@@ -432,7 +431,7 @@ Notation pcp_save_ra := (pcp_save_ra pcparams) (only parsing).
 
 (* ------------------------------------------------------------------------ *)
 
-(* TODO: Should we merge the following and [lti_funcs]? *)
+(* TODO: Should we merge the following and [lti_lfuncs]? *)
 Section DO_RETURN.
   (* Replace return instructions ([Lret] and [Ligoto]) by return tables. *)
 
@@ -628,7 +627,7 @@ Let is_max_label_in_fbody (lp : lprog) (fn : funname) (l : label) : bool :=
 Definition chk_f lp (fn : funname) (v : cst_value) : bool :=
   let '(s, max_lbl) := v in
   let tags := map snd s in
-  [&& sort (fun x y => x <? y) tags == ziota 0 (size tags)
+  [&& path.sort (fun x y => x <? y) tags == ziota 0 (Z.of_nat (size tags))
     & is_max_label_in_fbody lp fn max_lbl
   ].
 

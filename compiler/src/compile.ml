@@ -336,36 +336,7 @@ let compile (type reg regx xreg rflag cond asm_op extra_op)
   in
 
   let szs_of_fn fn =
-    match (get_annot fn).stack_zero_strategy with
-    | Some (s, ows) -> Some (s, Option.map Pretyping.tt_ws ows)
-    | None -> None
-  in
-
-  let tbl_annot =
-    let tbl = Hf.create 17 in
-    let add (fn, cfd) =
-      let fd = fdef_of_cufdef fn cfd in
-      Hf.add tbl fn fd.f_annot
-    in
-    List.iter add cprog.Expr.p_funcs;
-    tbl
-  in
-
-  let get_annot fn =
-    try Hf.find tbl_annot fn
-    with Not_found ->
-           hierror
-             ~loc:Lnone
-             ~funname:fn.fn_name
-             ~kind:"compiler error"
-             ~internal:true
-             "invalid annotation table."
-  in
-
-  let szs_of_fn fn =
-    match (get_annot fn).stack_zero_strategy with
-    | Some (s, ows) -> Some (s, Option.map Pretyping.tt_ws ows)
-    | None -> None
+    (get_annot fn).stack_zero_strategy
   in
 
   let cparams =
